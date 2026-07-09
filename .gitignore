@@ -21,3 +21,18 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# VS Code environment
+.vscode/
+
+# C++ Compilation & Build Outputs
+engine
+*.o
+*.out
+*.exe
+*.dSYM/
