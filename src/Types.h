@@ -1,7 +1,7 @@
 #include <cstdint>
 #include <array>
 
-
+using bitBoard = uint64_t;
 
 enum class Pieces : uint8_t
 {
@@ -34,15 +34,13 @@ struct Move
     bool wasEnPassant;
 };
 
-struct PieceOnSquare
-{
-    Pieces type = Pieces::emptySquare;
-    Colors color = Colors::noColor;
-};
+
 
 struct BoardState
 {
-    std::array<PieceOnSquare, 64> board;
+
+    bitBoard pieceMasks[7] = {0};
+    bitBoard colorMasks[2] = {0};
 
     Colors currentTurn;
 
