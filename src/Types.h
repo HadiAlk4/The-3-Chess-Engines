@@ -1,5 +1,4 @@
 #include <cstdint>
-#include <array>
 
 using bitBoard = uint64_t;
 
