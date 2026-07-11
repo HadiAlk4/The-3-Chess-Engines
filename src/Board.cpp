@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include "Board.h"
 
-
 Board::Board() {
     for (int i = 0; i < 7; i++) {
         gameState.pieceMasks[i] = 0;
@@ -15,13 +14,29 @@ Board::Board() {
 }
 
 void Board::printBoard() const {
-	for (int rank = 7; rank >= 0; rank--) {
+    char pieceSymbols[] = {'.', 'P', 'N', 'B', 'R', 'Q', 'K'};
+
+    for (int rank = 7; rank >= 0; rank--) {
         for (int file = 0; file < 8; file++) {
-			printf(". ");
-		}
+            
+            int square = (rank * 8) + file;
+            char symbolToPrint = ' '; 
+
+            for (int i = 1; i <= 6; i++) {
+                if ((gameState.pieceMasks[i] & (1ULL << square)) != 0) {
+                    symbolToPrint = pieceSymbols[i];
+                    break;
+                }
+            }
+			
+            if (symbolToPrint == ' ') {
+                printf(". ");
+            } else {
+                printf("%c ", symbolToPrint);
+            }
+        }
         printf("\n");
-    }		
-	
+    }
 }
 
 void Board::loadFEN(const std::string& fen) {
