@@ -7,7 +7,7 @@
 class Board 
 {
     private: 
-    BoardState gameState;
+    BoardState gameState; // private so direct bit manipulation cant happen 
     public: 
     Board();
     void loadFEN(const std::string& fen); // text format that describes chess positions 

@@ -41,12 +41,12 @@ struct BoardState
     bitBoard pieceMasks[7] = {0};
     bitBoard colorMasks[2] = {0};
 
-    Colors currentTurn;
+    Colors currentTurn = Colors::white;
 
-    bool castleWhiteKing;
-    bool castleWhiteQueen;
-    bool castleBlackKing;
-    bool castleBlackQueen;
+    bool castleWhiteKing = true;
+    bool castleWhiteQueen = true;
+    bool castleBlackKing = true;
+    bool castleBlackQueen = true;
 
     uint8_t enPassantTargetSquare = 200;
 
