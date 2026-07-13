@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "Board.h"
+#include <cctype>
 
 Board::Board() { 
     for (int i = 0; i < 7; i++) { // i dont think we need this i refactored them in in Types.h well see after some testing
@@ -27,6 +28,11 @@ void Board::printBoard() const {
                     break;
                 }
             }
+
+            if(gameState.colorMasks[(int)Colors::black] & ((1ULL << square) != 0))
+            {
+                symbolToPrint = std::tolower(symbolToPrint);
+            };
 			
             if (symbolToPrint == ' ') {
                 printf(". ");
