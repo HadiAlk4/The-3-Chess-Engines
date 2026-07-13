@@ -29,7 +29,7 @@ void Board::printBoard() const {
                 }
             }
 
-            if(gameState.colorMasks[(int)Colors::black] & ((1ULL << square) != 0))
+            if(gameState.colorMasks[(int)Colors::black] & (1ULL << square) != 0)
             {
                 symbolToPrint = std::tolower(symbolToPrint);
             };
@@ -45,5 +45,52 @@ void Board::printBoard() const {
 }
 
 void Board::loadFEN(const std::string& fen) {
-    
+    int rank = 7;
+    int file = 0;
+
+    for(char c : fen)
+    {
+        if(c == '/')
+        {
+            rank--;
+            file = 0;
+            continue;
+        }
+
+        if(std::isdigit(c))
+        {
+            file += c - '0';
+            continue;
+        }
+
+        if(std::isalpha(c))
+        {
+            int square = (rank * 8) + file;
+            int colorIndex = std::isupper(c) ? 0 : 1;
+            Pieces pieceType = Pieces::emptySquare;
+
+            switch(std::tolower(c))
+            {
+                case 'p': pieceType = Pieces::pawn; break;
+                case 'n': pieceType = Pieces::knight; break;
+                case 'b': pieceType = Pieces::bishop; break;
+                case 'r': pieceType = Pieces::rook; break;
+                case 'q': pieceType = Pieces::queen; break;
+                case 'k': pieceType = Pieces::king; break;
+                default: break;
+            }
+
+            if(pieceType != Pieces::emptySquare)
+            {
+                gameState.pieceMasks[(int)pieceType] |= (1ULL << square);
+                gameState.colorMasks[colorIndex] |= (1ULL << square);
+            }
+            file++;
+            continue;
+        }
+        if(c == ' ')
+        {
+            break;
+        }
+    }
 }
