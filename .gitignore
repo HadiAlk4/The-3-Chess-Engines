@@ -36,3 +36,5 @@ engine
 *.out
 *.exe
 *.dSYM/
+
+ chess_engine
