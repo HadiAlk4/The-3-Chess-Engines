@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "Board.h"
 #include <cctype>
+#include <sstream>
 
 Board::Board() { 
     // Kept for now: if refactored in Types.h can be removed
@@ -47,10 +48,15 @@ void Board::printBoard() const {
 }
 
 void Board::loadFEN(const std::string& fen) {
+
+    std::istringstream fenStream(fen);
+    std::string piecePlacement, activeColor, castlingRights, enPassant, halfMove, fullMove;
+
+    fenStream >> piecePlacement >> activeColor >> castlingRights >> enPassant >> halfMove >> fullMove;
     int rank = 7;
     int file = 0;
 
-    for(char c : fen)
+    for(char c : piecePlacement)
     {
         if(c == '/')
         {
@@ -96,4 +102,39 @@ void Board::loadFEN(const std::string& fen) {
             break;
         }
     }
+
+    if (activeColor == "w")
+    {
+    gameState.currentTurn = Colors::white;
+    } else 
+    {
+    gameState.currentTurn = Colors::black;
+    };
+
+    for( char c : castlingRights)
+    {
+        if (c == 'K') gameState.castleWhiteKing = true;
+        if (c == 'Q') gameState.castleWhiteQueen = true;
+        if(c == 'k') gameState.castleBlackKing = true;
+        if(c == 'q') gameState.castleBlackQueen = true;
+
+    };
+
+    if(enPassant == "-")
+    {
+        gameState.enPassantTargetSquare = 200;
+    } else 
+    {
+        int epFile = enPassant[0] - 'a'; // eg e - a = 4 whic is the correct file
+
+        int epRank = enPassant[1] - '1'; // eg 3 - 1 = 2
+
+        gameState.enPassantTargetSquare = (epRank * 8) + epFile;
+    }
+
+    gameState.halfMoveCount = std::stoi(halfMove);
+    gameState.fullMoveCount = std:: stoi(fullMove);
+
+
+
 }

@@ -43,10 +43,10 @@ struct BoardState
 
     Colors currentTurn = Colors::white;
 
-    bool castleWhiteKing = true;
-    bool castleWhiteQueen = true;
-    bool castleBlackKing = true;
-    bool castleBlackQueen = true;
+    bool castleWhiteKing = false;
+    bool castleWhiteQueen = false;
+    bool castleBlackKing = false;
+    bool castleBlackQueen = false;
 
     uint8_t enPassantTargetSquare = 200;
 
