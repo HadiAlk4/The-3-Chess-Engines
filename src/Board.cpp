@@ -3,6 +3,28 @@
 #include <cctype>
 #include <sstream>
 
+void Board::clearBoard() 
+{
+    for(int i=0;i<7;i++)
+    {
+        gameState.pieceMasks[i]=0;
+    }
+
+    gameState.colorMasks[0]=0;
+    gameState.colorMasks[1]=0;
+
+    gameState.currentTurn = Colors::white;
+    gameState.castleBlackKing = false;
+    gameState.castleBlackQueen = false;
+    gameState.castleWhiteKing = false;
+    gameState.castleWhiteQueen = false;
+
+    gameState.enPassantTargetSquare = 200;
+    gameState.halfMoveCount = 0;
+    gameState.fullMoveCount = 1;
+
+}
+
 Board::Board() { 
     // Kept for now: if refactored in Types.h can be removed
     for (int i = 0; i < 7; i++) {
@@ -48,6 +70,7 @@ void Board::printBoard() const {
 }
 
 void Board::loadFEN(const std::string& fen) {
+    clearBoard();
 
     std::istringstream fenStream(fen);
     std::string piecePlacement, activeColor, castlingRights, enPassant, halfMove, fullMove;
