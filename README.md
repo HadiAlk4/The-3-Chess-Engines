@@ -24,7 +24,7 @@ Before the engine can move, it must understand what a chessboard is and how to r
   - Implement the board representation (e.g., `int board[64]` or bitboard masks).
   - Create a `Move` struct/class (source square, target square, piece moved, captured piece, promotion flags).
   - Create a `BoardState` struct (current turn, castling rights, en passant target square, half-move clock for the 50-move rule).
-- [✅] **FEN Parser (Forsyth-Edwards Notation)**
+- [✅] **FEN Parser (Forsyth Edwards Notation)**
   - Write a function to ingest standard FEN strings (e.g., `"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"`) and populate your internal board state. This is vital for unit testing specific puzzle positions.
 - [✅] **ASCII Console Printer**
   - Create a debugging function that prints the 8x8 board to the console using readable ASCII characters (`P`, `n`, `b`, `r`, `q`, `k`, `.`) along with turn and castling indicators.
