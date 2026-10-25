@@ -6,6 +6,8 @@
 // {rankStep, fileStep}
 const int rookDirections[4][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
 const int bishopDirections[4][2] = { {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
+const int knightOffsets[8][2] = { {2, 1}, {2, -1}, {-2, 1}, {-2, -1}, {1, 2}, {1, -2}, {-1, 2}, {-1, -2} };
+const int kingOffsets[8][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
 
 void Board::clearBoard()
 {
@@ -262,6 +264,71 @@ void Board::generateSliderMoves(std::vector<Move>& moves) const
         queens &= queens - 1;
         addSliderMoves(square, Pieces::queen, rookDirections, 4, moves);
         addSliderMoves(square, Pieces::queen, bishopDirections, 4, moves);
+    }
+}
+
+void Board::addLeaperMoves(int square, Pieces piece, const int offsets[][2], int offsetCount, std::vector<Move>& moves) const
+{
+    int us = (int)gameState.currentTurn;
+    int them = 1 - us;
+
+    int startRank = square / 8;
+    int startFile = square % 8;
+
+    for (int o = 0; o < offsetCount; o++)
+    {
+        int rank = startRank + offsets[o][0];
+        int file = startFile + offsets[o][1];
+
+        // jump lands off the board
+        if (rank < 0 || rank >= 8 || file < 0 || file >= 8)
+        {
+            continue;
+        }
+
+        int target = (rank * 8) + file;
+        bitBoard targetMask = 1ULL << target;
+
+        // landing on our own piece
+        if ((gameState.colorMasks[us] & targetMask) != 0)
+        {
+            continue;
+        }
+
+        Move move{};
+        move.sourceSquare = static_cast<uint8_t>(square);
+        move.targetSquare = static_cast<uint8_t>(target);
+        move.movedPiece = piece;
+
+        if ((gameState.colorMasks[them] & targetMask) != 0)
+        {
+            move.capturedPiece = pieceAt(target);
+        }
+
+        moves.push_back(move);
+    }
+}
+
+void Board::generateLeaperMoves(std::vector<Move>& moves) const
+{
+    bitBoard ourPieces = gameState.colorMasks[(int)gameState.currentTurn];
+
+    bitBoard knights = gameState.pieceMasks[(int)Pieces::knight] & ourPieces;
+    bitBoard kings = gameState.pieceMasks[(int)Pieces::king] & ourPieces;
+
+    while (knights != 0)
+    {
+        int square = __builtin_ctzll(knights);
+        knights &= knights - 1;
+        addLeaperMoves(square, Pieces::knight, knightOffsets, 8, moves);
+    }
+
+    // castling is handled separately with the special rules
+    while (kings != 0)
+    {
+        int square = __builtin_ctzll(kings);
+        kings &= kings - 1;
+        addLeaperMoves(square, Pieces::king, kingOffsets, 8, moves);
     }
 }
 
