@@ -14,6 +14,7 @@ class Board
     Board();
     void loadFEN(const std::string& fen); // text format that describes chess positions 
     void printBoard() const;
+    Pieces pieceAt(int square) const; // returns emptySquare if nothing is on the square
 };
 
 #endif

@@ -1,3 +1,6 @@
+#ifndef TYPES_H
+#define TYPES_H
+
 #include <cstdint>
 
 using bitBoard = uint64_t;
@@ -55,3 +58,5 @@ struct BoardState
     uint8_t fullMoveCount = 1; // adds one everytime black finishes thier turn to track what turn the game is currently on 
 
 };
+
+#endif

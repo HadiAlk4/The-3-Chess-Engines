@@ -37,6 +37,21 @@ Board::Board() {
     gameState.currentTurn = Colors::white;
 }
 
+Pieces Board::pieceAt(int square) const
+{
+    bitBoard squareMask = 1ULL << square;
+
+    for (int i = 1; i <= 6; i++)
+    {
+        if ((gameState.pieceMasks[i] & squareMask) != 0)
+        {
+            return static_cast<Pieces>(i);
+        }
+    }
+
+    return Pieces::emptySquare;
+}
+
 void Board::printBoard() const {
     char pieceSymbols[] = {'.', 'P', 'N', 'B', 'R', 'Q', 'K'};
 
