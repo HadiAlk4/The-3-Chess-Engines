@@ -3,7 +3,13 @@
 #include <cctype>
 #include <sstream>
 
-void Board::clearBoard() 
+// {rankStep, fileStep}
+const int rookDirections[4][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
+const int bishopDirections[4][2] = { {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
+const int knightOffsets[8][2] = { {2, 1}, {2, -1}, {-2, 1}, {-2, -1}, {1, 2}, {1, -2}, {-1, 2}, {-1, -2} };
+const int kingOffsets[8][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
+
+void Board::clearBoard()
 {
     for(int i=0;i<7;i++)
     {
@@ -35,6 +41,21 @@ Board::Board() {
     gameState.colorMasks[1] = 0;
     
     gameState.currentTurn = Colors::white;
+}
+
+Pieces Board::pieceAt(int square) const
+{
+    bitBoard squareMask = 1ULL << square;
+
+    for (int i = 1; i <= 6; i++)
+    {
+        if ((gameState.pieceMasks[i] & squareMask) != 0)
+        {
+            return static_cast<Pieces>(i);
+        }
+    }
+
+    return Pieces::emptySquare;
 }
 
 void Board::printBoard() const {
@@ -160,4 +181,231 @@ void Board::loadFEN(const std::string& fen) {
 
 
 
+}
+void Board::addSliderMoves(int square, Pieces piece, const int directions[][2], int directionCount, std::vector<Move>& moves) const
+{
+    int us = (int)gameState.currentTurn;
+    int them = 1 - us;
+
+    int startRank = square / 8;
+    int startFile = square % 8;
+
+    for (int d = 0; d < directionCount; d++)
+    {
+        int rankStep = directions[d][0];
+        int fileStep = directions[d][1];
+
+        int rank = startRank + rankStep;
+        int file = startFile + fileStep;
+
+        while (rank >= 0 && rank < 8 && file >= 0 && file < 8)
+        {
+            int target = (rank * 8) + file;
+            bitBoard targetMask = 1ULL << target;
+
+            // blocked by our own piece
+            if ((gameState.colorMasks[us] & targetMask) != 0)
+            {
+                break;
+            }
+
+            Move move{};
+            move.sourceSquare = static_cast<uint8_t>(square);
+            move.targetSquare = static_cast<uint8_t>(target);
+            move.movedPiece = piece;
+
+            bool isCapture = (gameState.colorMasks[them] & targetMask) != 0;
+            if (isCapture)
+            {
+                move.capturedPiece = pieceAt(target);
+            }
+
+            moves.push_back(move);
+
+            // can capture an enemy piece but not slide past it
+            if (isCapture)
+            {
+                break;
+            }
+
+            rank += rankStep;
+            file += fileStep;
+        }
+    }
+}
+
+void Board::generateSliderMoves(std::vector<Move>& moves) const
+{
+    bitBoard ourPieces = gameState.colorMasks[(int)gameState.currentTurn];
+
+    bitBoard rooks = gameState.pieceMasks[(int)Pieces::rook] & ourPieces;
+    bitBoard bishops = gameState.pieceMasks[(int)Pieces::bishop] & ourPieces;
+    bitBoard queens = gameState.pieceMasks[(int)Pieces::queen] & ourPieces;
+
+    // pop the lowest set bit each loop to visit every piece once
+    while (rooks != 0)
+    {
+        int square = __builtin_ctzll(rooks);
+        rooks &= rooks - 1;
+        addSliderMoves(square, Pieces::rook, rookDirections, 4, moves);
+    }
+
+    while (bishops != 0)
+    {
+        int square = __builtin_ctzll(bishops);
+        bishops &= bishops - 1;
+        addSliderMoves(square, Pieces::bishop, bishopDirections, 4, moves);
+    }
+
+    // a queen is a rook and a bishop combined
+    while (queens != 0)
+    {
+        int square = __builtin_ctzll(queens);
+        queens &= queens - 1;
+        addSliderMoves(square, Pieces::queen, rookDirections, 4, moves);
+        addSliderMoves(square, Pieces::queen, bishopDirections, 4, moves);
+    }
+}
+
+void Board::addLeaperMoves(int square, Pieces piece, const int offsets[][2], int offsetCount, std::vector<Move>& moves) const
+{
+    int us = (int)gameState.currentTurn;
+    int them = 1 - us;
+
+    int startRank = square / 8;
+    int startFile = square % 8;
+
+    for (int o = 0; o < offsetCount; o++)
+    {
+        int rank = startRank + offsets[o][0];
+        int file = startFile + offsets[o][1];
+
+        // jump lands off the board
+        if (rank < 0 || rank >= 8 || file < 0 || file >= 8)
+        {
+            continue;
+        }
+
+        int target = (rank * 8) + file;
+        bitBoard targetMask = 1ULL << target;
+
+        // landing on our own piece
+        if ((gameState.colorMasks[us] & targetMask) != 0)
+        {
+            continue;
+        }
+
+        Move move{};
+        move.sourceSquare = static_cast<uint8_t>(square);
+        move.targetSquare = static_cast<uint8_t>(target);
+        move.movedPiece = piece;
+
+        if ((gameState.colorMasks[them] & targetMask) != 0)
+        {
+            move.capturedPiece = pieceAt(target);
+        }
+
+        moves.push_back(move);
+    }
+}
+
+void Board::generateLeaperMoves(std::vector<Move>& moves) const
+{
+    bitBoard ourPieces = gameState.colorMasks[(int)gameState.currentTurn];
+
+    bitBoard knights = gameState.pieceMasks[(int)Pieces::knight] & ourPieces;
+    bitBoard kings = gameState.pieceMasks[(int)Pieces::king] & ourPieces;
+
+    while (knights != 0)
+    {
+        int square = __builtin_ctzll(knights);
+        knights &= knights - 1;
+        addLeaperMoves(square, Pieces::knight, knightOffsets, 8, moves);
+    }
+
+    // castling is handled separately with the special rules
+    while (kings != 0)
+    {
+        int square = __builtin_ctzll(kings);
+        kings &= kings - 1;
+        addLeaperMoves(square, Pieces::king, kingOffsets, 8, moves);
+    }
+}
+
+void Board::generatePawnMoves(std::vector<Move>& moves) const
+{
+    int us = (int)gameState.currentTurn;
+    int them = 1 - us;
+
+    bitBoard occupied = gameState.colorMasks[0] | gameState.colorMasks[1];
+    bitBoard pawns = gameState.pieceMasks[(int)Pieces::pawn] & gameState.colorMasks[us];
+
+    // white pawns move up the board, black pawns move down
+    int forward = (gameState.currentTurn == Colors::white) ? 1 : -1;
+    int doublePushRank = (gameState.currentTurn == Colors::white) ? 1 : 6;
+
+    while (pawns != 0)
+    {
+        int square = __builtin_ctzll(pawns);
+        pawns &= pawns - 1;
+
+        int startRank = square / 8;
+        int startFile = square % 8;
+        int rank = startRank + forward;
+
+        // a pawn on the last rank would already have promoted
+        if (rank < 0 || rank >= 8)
+        {
+            continue;
+        }
+
+        Move move{};
+        move.sourceSquare = static_cast<uint8_t>(square);
+        move.movedPiece = Pieces::pawn;
+
+        // single push: the square ahead must be empty
+        int oneAhead = (rank * 8) + startFile;
+        if ((occupied & (1ULL << oneAhead)) == 0)
+        {
+            move.targetSquare = static_cast<uint8_t>(oneAhead);
+            moves.push_back(move);
+
+            // double push: only from the starting rank, and both squares must be empty
+            int twoAhead = oneAhead + (forward * 8);
+            if (startRank == doublePushRank && (occupied & (1ULL << twoAhead)) == 0)
+            {
+                move.targetSquare = static_cast<uint8_t>(twoAhead);
+                moves.push_back(move);
+            }
+        }
+
+        // diagonal captures: only onto an enemy piece
+        for (int fileStep = -1; fileStep <= 1; fileStep += 2)
+        {
+            int file = startFile + fileStep;
+            if (file < 0 || file >= 8)
+            {
+                continue;
+            }
+
+            int target = (rank * 8) + file;
+            if ((gameState.colorMasks[them] & (1ULL << target)) != 0)
+            {
+                Move capture = move;
+                capture.targetSquare = static_cast<uint8_t>(target);
+                capture.capturedPiece = pieceAt(target);
+                moves.push_back(capture);
+            }
+        }
+    }
+}
+
+std::string moveToString(const Move& move)
+{
+    std::string text;
+    text += static_cast<char>('a' + move.sourceSquare % 8);
+    text += static_cast<char>('1' + move.sourceSquare / 8);
+    text += static_cast<char>('a' + move.targetSquare % 8);
+    text += static_cast<char>('1' + move.targetSquare / 8);
+    return text;
 }
