@@ -34,7 +34,7 @@ Before the engine can move, it must understand what a chessboard is and how to r
 ### Phase 2: Move Generation & Legal Validation (The Mechanical Core)
 This is the most critical and time-consuming phase. Your engine must generate every legal move in any position with **zero rules bugs**.
 
-- [ ] **Pseudo-Legal Move Generator**
+- [✅] **Pseudo-Legal Move Generator**
   - **Sliders (Rook, Bishop, Queen):** Implement ray-casting loops that stop at board edges or obstacles.
   - **Leapers (Knight, King):** Implement fixed square-offset jumps.
   - **Pawns:** Implement single/double forward pushes and diagonal captures.
