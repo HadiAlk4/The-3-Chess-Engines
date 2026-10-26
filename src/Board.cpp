@@ -332,6 +332,74 @@ void Board::generateLeaperMoves(std::vector<Move>& moves) const
     }
 }
 
+void Board::generatePawnMoves(std::vector<Move>& moves) const
+{
+    int us = (int)gameState.currentTurn;
+    int them = 1 - us;
+
+    bitBoard occupied = gameState.colorMasks[0] | gameState.colorMasks[1];
+    bitBoard pawns = gameState.pieceMasks[(int)Pieces::pawn] & gameState.colorMasks[us];
+
+    // white pawns move up the board, black pawns move down
+    int forward = (gameState.currentTurn == Colors::white) ? 1 : -1;
+    int doublePushRank = (gameState.currentTurn == Colors::white) ? 1 : 6;
+
+    while (pawns != 0)
+    {
+        int square = __builtin_ctzll(pawns);
+        pawns &= pawns - 1;
+
+        int startRank = square / 8;
+        int startFile = square % 8;
+        int rank = startRank + forward;
+
+        // a pawn on the last rank would already have promoted
+        if (rank < 0 || rank >= 8)
+        {
+            continue;
+        }
+
+        Move move{};
+        move.sourceSquare = static_cast<uint8_t>(square);
+        move.movedPiece = Pieces::pawn;
+
+        // single push: the square ahead must be empty
+        int oneAhead = (rank * 8) + startFile;
+        if ((occupied & (1ULL << oneAhead)) == 0)
+        {
+            move.targetSquare = static_cast<uint8_t>(oneAhead);
+            moves.push_back(move);
+
+            // double push: only from the starting rank, and both squares must be empty
+            int twoAhead = oneAhead + (forward * 8);
+            if (startRank == doublePushRank && (occupied & (1ULL << twoAhead)) == 0)
+            {
+                move.targetSquare = static_cast<uint8_t>(twoAhead);
+                moves.push_back(move);
+            }
+        }
+
+        // diagonal captures: only onto an enemy piece
+        for (int fileStep = -1; fileStep <= 1; fileStep += 2)
+        {
+            int file = startFile + fileStep;
+            if (file < 0 || file >= 8)
+            {
+                continue;
+            }
+
+            int target = (rank * 8) + file;
+            if ((gameState.colorMasks[them] & (1ULL << target)) != 0)
+            {
+                Move capture = move;
+                capture.targetSquare = static_cast<uint8_t>(target);
+                capture.capturedPiece = pieceAt(target);
+                moves.push_back(capture);
+            }
+        }
+    }
+}
+
 std::string moveToString(const Move& move)
 {
     std::string text;

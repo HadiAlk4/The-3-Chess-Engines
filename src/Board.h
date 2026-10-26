@@ -22,6 +22,7 @@ class Board
     Pieces pieceAt(int square) const; // returns emptySquare if nothing is on the square
     void generateSliderMoves(std::vector<Move>& moves) const; // pseudo-legal rook, bishop and queen moves for the side to move
     void generateLeaperMoves(std::vector<Move>& moves) const; // pseudo-legal knight and king moves for the side to move (no castling)
+    void generatePawnMoves(std::vector<Move>& moves) const; // pseudo-legal pawn pushes and captures for the side to move (no en passant or promotion)
 };
 
 std::string moveToString(const Move& move); // e.g. "a1a8"
