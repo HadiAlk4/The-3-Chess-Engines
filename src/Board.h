@@ -23,6 +23,7 @@ class Board
     void generateSliderMoves(std::vector<Move>& moves) const; // pseudo-legal rook, bishop and queen moves for the side to move
     void generateLeaperMoves(std::vector<Move>& moves) const; // pseudo-legal knight and king moves for the side to move (no castling)
     void generatePawnMoves(std::vector<Move>& moves) const; // pseudo-legal pawn pushes and captures for the side to move (no en passant or promotion)
+    bool isSquareAttacked(int square, Colors attackerColor) const; // true if any attackerColor piece hits square
 };
 
 std::string moveToString(const Move& move); // e.g. "a1a8"

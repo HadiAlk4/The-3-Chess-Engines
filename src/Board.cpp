@@ -400,6 +400,85 @@ void Board::generatePawnMoves(std::vector<Move>& moves) const
     }
 }
 
+bool Board::isSquareAttacked(int square, Colors attackerColor) const
+{
+    bitBoard attackers = gameState.colorMasks[(int)attackerColor];
+    bitBoard occupied = gameState.colorMasks[0] | gameState.colorMasks[1];
+
+    bitBoard pawns = gameState.pieceMasks[(int)Pieces::pawn] & attackers;
+    bitBoard knights = gameState.pieceMasks[(int)Pieces::knight] & attackers;
+    bitBoard kings = gameState.pieceMasks[(int)Pieces::king] & attackers;
+    // queens attack like both rooks and bishops
+    bitBoard straightSliders = (gameState.pieceMasks[(int)Pieces::rook] | gameState.pieceMasks[(int)Pieces::queen]) & attackers;
+    bitBoard diagonalSliders = (gameState.pieceMasks[(int)Pieces::bishop] | gameState.pieceMasks[(int)Pieces::queen]) & attackers;
+
+    int startRank = square / 8;
+    int startFile = square % 8;
+
+    // look outward from the square: an attacker on the other end of a pattern hits it
+    // white pawns attack upward, so they sit one rank below the square they attack
+    int pawnRank = startRank + ((attackerColor == Colors::white) ? -1 : 1);
+    if (pawnRank >= 0 && pawnRank < 8)
+    {
+        for (int fileStep = -1; fileStep <= 1; fileStep += 2)
+        {
+            int file = startFile + fileStep;
+            if (file >= 0 && file < 8 && (pawns & (1ULL << ((pawnRank * 8) + file))) != 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    for (int o = 0; o < 8; o++)
+    {
+        int rank = startRank + knightOffsets[o][0];
+        int file = startFile + knightOffsets[o][1];
+        if (rank >= 0 && rank < 8 && file >= 0 && file < 8 && (knights & (1ULL << ((rank * 8) + file))) != 0)
+        {
+            return true;
+        }
+
+        rank = startRank + kingOffsets[o][0];
+        file = startFile + kingOffsets[o][1];
+        if (rank >= 0 && rank < 8 && file >= 0 && file < 8 && (kings & (1ULL << ((rank * 8) + file))) != 0)
+        {
+            return true;
+        }
+    }
+
+    for (int d = 0; d < 4; d++)
+    {
+        for (int pass = 0; pass < 2; pass++)
+        {
+            const int* direction = (pass == 0) ? rookDirections[d] : bishopDirections[d];
+            bitBoard sliders = (pass == 0) ? straightSliders : diagonalSliders;
+
+            int rank = startRank + direction[0];
+            int file = startFile + direction[1];
+
+            // only the first piece on each ray can attack, anything behind it is blocked
+            while (rank >= 0 && rank < 8 && file >= 0 && file < 8)
+            {
+                bitBoard targetMask = 1ULL << ((rank * 8) + file);
+                if ((occupied & targetMask) != 0)
+                {
+                    if ((sliders & targetMask) != 0)
+                    {
+                        return true;
+                    }
+                    break;
+                }
+
+                rank += direction[0];
+                file += direction[1];
+            }
+        }
+    }
+
+    return false;
+}
+
 std::string moveToString(const Move& move)
 {
     std::string text;
