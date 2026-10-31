@@ -479,6 +479,72 @@ bool Board::isSquareAttacked(int square, Colors attackerColor) const
     return false;
 }
 
+void Board::generateCastlingMoves(std::vector<Move>& moves) const
+{
+    bool isWhite = gameState.currentTurn == Colors::white;
+    Colors enemy = isWhite ? Colors::black : Colors::white;
+
+    bool kingSideRight = isWhite ? gameState.castleWhiteKing : gameState.castleBlackKing;
+    bool queenSideRight = isWhite ? gameState.castleWhiteQueen : gameState.castleBlackQueen;
+    if (!kingSideRight && !queenSideRight)
+    {
+        return;
+    }
+
+    bitBoard ourPieces = gameState.colorMasks[(int)gameState.currentTurn];
+    bitBoard occupied = gameState.colorMasks[0] | gameState.colorMasks[1];
+    bitBoard ourRooks = gameState.pieceMasks[(int)Pieces::rook] & ourPieces;
+    bitBoard ourKings = gameState.pieceMasks[(int)Pieces::king] & ourPieces;
+
+    // the rights only say the king and rook haven't moved, so still check they're on their home squares
+    int kingSquare = isWhite ? 4 : 60; // e1 or e8
+    if ((ourKings & (1ULL << kingSquare)) == 0)
+    {
+        return;
+    }
+
+    // can't castle out of check
+    if (isSquareAttacked(kingSquare, enemy))
+    {
+        return;
+    }
+
+    Move move{};
+    move.sourceSquare = static_cast<uint8_t>(kingSquare);
+    move.movedPiece = Pieces::king;
+    move.wasCastling = true;
+
+    // king side: f and g must be empty and safe
+    int fSquare = kingSquare + 1;
+    int gSquare = kingSquare + 2;
+    int hSquare = kingSquare + 3;
+    if (kingSideRight
+        && (ourRooks & (1ULL << hSquare)) != 0
+        && (occupied & ((1ULL << fSquare) | (1ULL << gSquare))) == 0
+        && !isSquareAttacked(fSquare, enemy)
+        && !isSquareAttacked(gSquare, enemy))
+    {
+        move.targetSquare = static_cast<uint8_t>(gSquare);
+        moves.push_back(move);
+    }
+
+    // queen side: d, c and b must be empty, but only d and c need to be safe
+    // since the king never touches b
+    int dSquare = kingSquare - 1;
+    int cSquare = kingSquare - 2;
+    int bSquare = kingSquare - 3;
+    int aSquare = kingSquare - 4;
+    if (queenSideRight
+        && (ourRooks & (1ULL << aSquare)) != 0
+        && (occupied & ((1ULL << dSquare) | (1ULL << cSquare) | (1ULL << bSquare))) == 0
+        && !isSquareAttacked(dSquare, enemy)
+        && !isSquareAttacked(cSquare, enemy))
+    {
+        move.targetSquare = static_cast<uint8_t>(cSquare);
+        moves.push_back(move);
+    }
+}
+
 std::string moveToString(const Move& move)
 {
     std::string text;

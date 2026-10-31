@@ -24,6 +24,7 @@ class Board
     void generateLeaperMoves(std::vector<Move>& moves) const; // pseudo-legal knight and king moves for the side to move (no castling)
     void generatePawnMoves(std::vector<Move>& moves) const; // pseudo-legal pawn pushes and captures for the side to move (no en passant or promotion)
     bool isSquareAttacked(int square, Colors attackerColor) const; // true if any attackerColor piece hits square
+    void generateCastlingMoves(std::vector<Move>& moves) const; // castling moves for the side to move, encoded as the king's two-square move
 };
 
 std::string moveToString(const Move& move); // e.g. "a1a8"
