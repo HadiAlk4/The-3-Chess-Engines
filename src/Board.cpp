@@ -8,6 +8,24 @@ const int rookDirections[4][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
 const int bishopDirections[4][2] = { {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
 const int knightOffsets[8][2] = { {2, 1}, {2, -1}, {-2, 1}, {-2, -1}, {1, 2}, {1, -2}, {-1, 2}, {-1, -2} };
 const int kingOffsets[8][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
+const Pieces promotionPieces[4] = { Pieces::queen, Pieces::rook, Pieces::bishop, Pieces::knight };
+
+// a pawn reaching the last rank becomes four moves, one per promotion piece
+static void addPawnMove(Move move, std::vector<Move>& moves)
+{
+    int targetRank = move.targetSquare / 8;
+    if (targetRank != 0 && targetRank != 7)
+    {
+        moves.push_back(move);
+        return;
+    }
+
+    for (Pieces piece : promotionPieces)
+    {
+        move.promotionPiece = piece;
+        moves.push_back(move);
+    }
+}
 
 void Board::clearBoard()
 {
@@ -353,7 +371,7 @@ void Board::generatePawnMoves(std::vector<Move>& moves) const
         int startFile = square % 8;
         int rank = startRank + forward;
 
-        // a pawn on the last rank would already have promoted
+        // a pawn can never stand on the last rank, it promotes on arrival
         if (rank < 0 || rank >= 8)
         {
             continue;
@@ -368,7 +386,7 @@ void Board::generatePawnMoves(std::vector<Move>& moves) const
         if ((occupied & (1ULL << oneAhead)) == 0)
         {
             move.targetSquare = static_cast<uint8_t>(oneAhead);
-            moves.push_back(move);
+            addPawnMove(move, moves);
 
             // double push: only from the starting rank, and both squares must be empty
             int twoAhead = oneAhead + (forward * 8);
@@ -394,7 +412,7 @@ void Board::generatePawnMoves(std::vector<Move>& moves) const
                 Move capture = move;
                 capture.targetSquare = static_cast<uint8_t>(target);
                 capture.capturedPiece = pieceAt(target);
-                moves.push_back(capture);
+                addPawnMove(capture, moves);
             }
             // en passant: the target square is empty and the captured pawn sits just behind it
             else if (target == gameState.enPassantTargetSquare)
@@ -568,5 +586,16 @@ std::string moveToString(const Move& move)
     text += static_cast<char>('1' + move.sourceSquare / 8);
     text += static_cast<char>('a' + move.targetSquare % 8);
     text += static_cast<char>('1' + move.targetSquare / 8);
+
+    // UCI adds the promotion piece in lowercase, e.g. "e7e8q"
+    switch (move.promotionPiece)
+    {
+        case Pieces::queen: text += 'q'; break;
+        case Pieces::rook: text += 'r'; break;
+        case Pieces::bishop: text += 'b'; break;
+        case Pieces::knight: text += 'n'; break;
+        default: break;
+    }
+
     return text;
 }
