@@ -8,6 +8,24 @@ const int rookDirections[4][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
 const int bishopDirections[4][2] = { {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
 const int knightOffsets[8][2] = { {2, 1}, {2, -1}, {-2, 1}, {-2, -1}, {1, 2}, {1, -2}, {-1, 2}, {-1, -2} };
 const int kingOffsets[8][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
+const Pieces promotionPieces[4] = { Pieces::queen, Pieces::rook, Pieces::bishop, Pieces::knight };
+
+// a pawn reaching the last rank becomes four moves, one per promotion piece
+static void addPawnMove(Move move, std::vector<Move>& moves)
+{
+    int targetRank = move.targetSquare / 8;
+    if (targetRank != 0 && targetRank != 7)
+    {
+        moves.push_back(move);
+        return;
+    }
+
+    for (Pieces piece : promotionPieces)
+    {
+        move.promotionPiece = piece;
+        moves.push_back(move);
+    }
+}
 
 void Board::clearBoard()
 {
@@ -353,7 +371,7 @@ void Board::generatePawnMoves(std::vector<Move>& moves) const
         int startFile = square % 8;
         int rank = startRank + forward;
 
-        // a pawn on the last rank would already have promoted
+        // a pawn can never stand on the last rank, it promotes on arrival
         if (rank < 0 || rank >= 8)
         {
             continue;
@@ -368,7 +386,7 @@ void Board::generatePawnMoves(std::vector<Move>& moves) const
         if ((occupied & (1ULL << oneAhead)) == 0)
         {
             move.targetSquare = static_cast<uint8_t>(oneAhead);
-            moves.push_back(move);
+            addPawnMove(move, moves);
 
             // double push: only from the starting rank, and both squares must be empty
             int twoAhead = oneAhead + (forward * 8);
@@ -394,9 +412,170 @@ void Board::generatePawnMoves(std::vector<Move>& moves) const
                 Move capture = move;
                 capture.targetSquare = static_cast<uint8_t>(target);
                 capture.capturedPiece = pieceAt(target);
-                moves.push_back(capture);
+                addPawnMove(capture, moves);
+            }
+            // en passant: the target square is empty and the captured pawn sits just behind it
+            else if (target == gameState.enPassantTargetSquare)
+            {
+                int capturedSquare = target - (forward * 8);
+                bitBoard enemyPawns = gameState.pieceMasks[(int)Pieces::pawn] & gameState.colorMasks[them];
+
+                // guard against a FEN whose en passant square has no pawn to take
+                if ((enemyPawns & (1ULL << capturedSquare)) != 0)
+                {
+                    Move capture = move;
+                    capture.targetSquare = static_cast<uint8_t>(target);
+                    capture.capturedPiece = Pieces::pawn;
+                    capture.wasEnPassant = true;
+                    moves.push_back(capture);
+                }
             }
         }
+    }
+}
+
+bool Board::isSquareAttacked(int square, Colors attackerColor) const
+{
+    bitBoard attackers = gameState.colorMasks[(int)attackerColor];
+    bitBoard occupied = gameState.colorMasks[0] | gameState.colorMasks[1];
+
+    bitBoard pawns = gameState.pieceMasks[(int)Pieces::pawn] & attackers;
+    bitBoard knights = gameState.pieceMasks[(int)Pieces::knight] & attackers;
+    bitBoard kings = gameState.pieceMasks[(int)Pieces::king] & attackers;
+    // queens attack like both rooks and bishops
+    bitBoard straightSliders = (gameState.pieceMasks[(int)Pieces::rook] | gameState.pieceMasks[(int)Pieces::queen]) & attackers;
+    bitBoard diagonalSliders = (gameState.pieceMasks[(int)Pieces::bishop] | gameState.pieceMasks[(int)Pieces::queen]) & attackers;
+
+    int startRank = square / 8;
+    int startFile = square % 8;
+
+    // look outward from the square: an attacker on the other end of a pattern hits it
+    // white pawns attack upward, so they sit one rank below the square they attack
+    int pawnRank = startRank + ((attackerColor == Colors::white) ? -1 : 1);
+    if (pawnRank >= 0 && pawnRank < 8)
+    {
+        for (int fileStep = -1; fileStep <= 1; fileStep += 2)
+        {
+            int file = startFile + fileStep;
+            if (file >= 0 && file < 8 && (pawns & (1ULL << ((pawnRank * 8) + file))) != 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    for (int o = 0; o < 8; o++)
+    {
+        int rank = startRank + knightOffsets[o][0];
+        int file = startFile + knightOffsets[o][1];
+        if (rank >= 0 && rank < 8 && file >= 0 && file < 8 && (knights & (1ULL << ((rank * 8) + file))) != 0)
+        {
+            return true;
+        }
+
+        rank = startRank + kingOffsets[o][0];
+        file = startFile + kingOffsets[o][1];
+        if (rank >= 0 && rank < 8 && file >= 0 && file < 8 && (kings & (1ULL << ((rank * 8) + file))) != 0)
+        {
+            return true;
+        }
+    }
+
+    for (int d = 0; d < 4; d++)
+    {
+        for (int pass = 0; pass < 2; pass++)
+        {
+            const int* direction = (pass == 0) ? rookDirections[d] : bishopDirections[d];
+            bitBoard sliders = (pass == 0) ? straightSliders : diagonalSliders;
+
+            int rank = startRank + direction[0];
+            int file = startFile + direction[1];
+
+            // only the first piece on each ray can attack, anything behind it is blocked
+            while (rank >= 0 && rank < 8 && file >= 0 && file < 8)
+            {
+                bitBoard targetMask = 1ULL << ((rank * 8) + file);
+                if ((occupied & targetMask) != 0)
+                {
+                    if ((sliders & targetMask) != 0)
+                    {
+                        return true;
+                    }
+                    break;
+                }
+
+                rank += direction[0];
+                file += direction[1];
+            }
+        }
+    }
+
+    return false;
+}
+
+void Board::generateCastlingMoves(std::vector<Move>& moves) const
+{
+    bool isWhite = gameState.currentTurn == Colors::white;
+    Colors enemy = isWhite ? Colors::black : Colors::white;
+
+    bool kingSideRight = isWhite ? gameState.castleWhiteKing : gameState.castleBlackKing;
+    bool queenSideRight = isWhite ? gameState.castleWhiteQueen : gameState.castleBlackQueen;
+    if (!kingSideRight && !queenSideRight)
+    {
+        return;
+    }
+
+    bitBoard ourPieces = gameState.colorMasks[(int)gameState.currentTurn];
+    bitBoard occupied = gameState.colorMasks[0] | gameState.colorMasks[1];
+    bitBoard ourRooks = gameState.pieceMasks[(int)Pieces::rook] & ourPieces;
+    bitBoard ourKings = gameState.pieceMasks[(int)Pieces::king] & ourPieces;
+
+    // the rights only say the king and rook haven't moved, so still check they're on their home squares
+    int kingSquare = isWhite ? 4 : 60; // e1 or e8
+    if ((ourKings & (1ULL << kingSquare)) == 0)
+    {
+        return;
+    }
+
+    // can't castle out of check
+    if (isSquareAttacked(kingSquare, enemy))
+    {
+        return;
+    }
+
+    Move move{};
+    move.sourceSquare = static_cast<uint8_t>(kingSquare);
+    move.movedPiece = Pieces::king;
+    move.wasCastling = true;
+
+    // king side: f and g must be empty and safe
+    int fSquare = kingSquare + 1;
+    int gSquare = kingSquare + 2;
+    int hSquare = kingSquare + 3;
+    if (kingSideRight
+        && (ourRooks & (1ULL << hSquare)) != 0
+        && (occupied & ((1ULL << fSquare) | (1ULL << gSquare))) == 0
+        && !isSquareAttacked(fSquare, enemy)
+        && !isSquareAttacked(gSquare, enemy))
+    {
+        move.targetSquare = static_cast<uint8_t>(gSquare);
+        moves.push_back(move);
+    }
+
+    // queen side: d, c and b must be empty, but only d and c need to be safe
+    // since the king never touches b
+    int dSquare = kingSquare - 1;
+    int cSquare = kingSquare - 2;
+    int bSquare = kingSquare - 3;
+    int aSquare = kingSquare - 4;
+    if (queenSideRight
+        && (ourRooks & (1ULL << aSquare)) != 0
+        && (occupied & ((1ULL << dSquare) | (1ULL << cSquare) | (1ULL << bSquare))) == 0
+        && !isSquareAttacked(dSquare, enemy)
+        && !isSquareAttacked(cSquare, enemy))
+    {
+        move.targetSquare = static_cast<uint8_t>(cSquare);
+        moves.push_back(move);
     }
 }
 
@@ -407,5 +586,16 @@ std::string moveToString(const Move& move)
     text += static_cast<char>('1' + move.sourceSquare / 8);
     text += static_cast<char>('a' + move.targetSquare % 8);
     text += static_cast<char>('1' + move.targetSquare / 8);
+
+    // UCI adds the promotion piece in lowercase, e.g. "e7e8q"
+    switch (move.promotionPiece)
+    {
+        case Pieces::queen: text += 'q'; break;
+        case Pieces::rook: text += 'r'; break;
+        case Pieces::bishop: text += 'b'; break;
+        case Pieces::knight: text += 'n'; break;
+        default: break;
+    }
+
     return text;
 }

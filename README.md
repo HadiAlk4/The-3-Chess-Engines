@@ -38,7 +38,7 @@ This is the most critical and time-consuming phase. Your engine must generate ev
   - **Sliders (Rook, Bishop, Queen):** Implement ray-casting loops that stop at board edges or obstacles.
   - **Leapers (Knight, King):** Implement fixed square-offset jumps.
   - **Pawns:** Implement single/double forward pushes and diagonal captures.
-- [ ] **Special Rules**
+- [✅] **Special Rules**
   - **Castling:** Validate king/rook first-move rights, empty intervening squares, and ensure the King doesn't castle through check.
   - **En Passant:** Handle the unique diagonal capture of a pawn that just made a double-step.
   - **Promotions:** Allow pawns reaching the 8th/1st rank to promote to Q, R, B, or N.
