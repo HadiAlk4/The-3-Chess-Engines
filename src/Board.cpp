@@ -396,6 +396,22 @@ void Board::generatePawnMoves(std::vector<Move>& moves) const
                 capture.capturedPiece = pieceAt(target);
                 moves.push_back(capture);
             }
+            // en passant: the target square is empty and the captured pawn sits just behind it
+            else if (target == gameState.enPassantTargetSquare)
+            {
+                int capturedSquare = target - (forward * 8);
+                bitBoard enemyPawns = gameState.pieceMasks[(int)Pieces::pawn] & gameState.colorMasks[them];
+
+                // guard against a FEN whose en passant square has no pawn to take
+                if ((enemyPawns & (1ULL << capturedSquare)) != 0)
+                {
+                    Move capture = move;
+                    capture.targetSquare = static_cast<uint8_t>(target);
+                    capture.capturedPiece = Pieces::pawn;
+                    capture.wasEnPassant = true;
+                    moves.push_back(capture);
+                }
+            }
         }
     }
 }
