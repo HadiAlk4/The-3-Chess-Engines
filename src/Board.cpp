@@ -579,6 +579,144 @@ void Board::generateCastlingMoves(std::vector<Move>& moves) const
     }
 }
 
+void Board::generatePseudoLegalMoves(std::vector<Move>& moves) const
+{
+    generatePawnMoves(moves);
+    generateLeaperMoves(moves);
+    generateSliderMoves(moves);
+    generateCastlingMoves(moves);
+}
+
+// a move touching a rook's home square (rook moving away or getting captured) kills that castling right
+static void clearCastlingRightsFor(int square, BoardState& state)
+{
+    switch (square)
+    {
+        case 0:  state.castleWhiteQueen = false; break; // a1
+        case 7:  state.castleWhiteKing = false; break;  // h1
+        case 56: state.castleBlackQueen = false; break; // a8
+        case 63: state.castleBlackKing = false; break;  // h8
+        default: break;
+    }
+}
+
+void Board::makeMove(const Move& move)
+{
+    int us = (int)gameState.currentTurn;
+    int them = 1 - us;
+    bool isWhite = gameState.currentTurn == Colors::white;
+
+    int source = move.sourceSquare;
+    int target = move.targetSquare;
+    bitBoard sourceMask = 1ULL << source;
+    bitBoard targetMask = 1ULL << target;
+
+    // remove the captured piece first, en passant takes the pawn behind the target square
+    if (move.wasEnPassant)
+    {
+        int capturedSquare = target + (isWhite ? -8 : 8);
+        bitBoard capturedMask = 1ULL << capturedSquare;
+        gameState.pieceMasks[(int)Pieces::pawn] &= ~capturedMask;
+        gameState.colorMasks[them] &= ~capturedMask;
+    }
+    else if (move.capturedPiece != Pieces::emptySquare)
+    {
+        gameState.pieceMasks[(int)move.capturedPiece] &= ~targetMask;
+        gameState.colorMasks[them] &= ~targetMask;
+    }
+
+    // lift the piece off its square and drop it (or its promotion) on the target
+    Pieces landingPiece = (move.promotionPiece != Pieces::emptySquare) ? move.promotionPiece : move.movedPiece;
+    gameState.pieceMasks[(int)move.movedPiece] &= ~sourceMask;
+    gameState.colorMasks[us] &= ~sourceMask;
+    gameState.pieceMasks[(int)landingPiece] |= targetMask;
+    gameState.colorMasks[us] |= targetMask;
+
+    // castling is encoded as the king's move, so bring the rook across too
+    if (move.wasCastling)
+    {
+        bool kingSide = target > source;
+        int rookFrom = kingSide ? source + 3 : source - 4; // h-file or a-file
+        int rookTo = kingSide ? source + 1 : source - 1;   // f-file or d-file
+        bitBoard rookMove = (1ULL << rookFrom) | (1ULL << rookTo);
+        gameState.pieceMasks[(int)Pieces::rook] ^= rookMove;
+        gameState.colorMasks[us] ^= rookMove;
+    }
+
+    // a king move loses both rights, a rook leaving or being taken on its home square loses one
+    if (move.movedPiece == Pieces::king)
+    {
+        if (isWhite)
+        {
+            gameState.castleWhiteKing = false;
+            gameState.castleWhiteQueen = false;
+        }
+        else
+        {
+            gameState.castleBlackKing = false;
+            gameState.castleBlackQueen = false;
+        }
+    }
+    clearCastlingRightsFor(source, gameState);
+    clearCastlingRightsFor(target, gameState);
+
+    // only a double pawn push creates an en passant square: the one it skipped over
+    gameState.enPassantTargetSquare = 200;
+    if (move.movedPiece == Pieces::pawn && (target - source == 16 || source - target == 16))
+    {
+        gameState.enPassantTargetSquare = static_cast<uint8_t>((source + target) / 2);
+    }
+
+    if (move.movedPiece == Pieces::pawn || move.capturedPiece != Pieces::emptySquare)
+    {
+        gameState.halfMoveCount = 0;
+    }
+    else
+    {
+        gameState.halfMoveCount++;
+    }
+
+    if (!isWhite)
+    {
+        gameState.fullMoveCount++;
+    }
+
+    gameState.currentTurn = isWhite ? Colors::black : Colors::white;
+}
+
+bool Board::isInCheck(Colors color) const
+{
+    bitBoard king = gameState.pieceMasks[(int)Pieces::king] & gameState.colorMasks[(int)color];
+
+    // no king on the board (a test FEN), so nothing can be in check
+    if (king == 0)
+    {
+        return false;
+    }
+
+    Colors enemy = (color == Colors::white) ? Colors::black : Colors::white;
+    return isSquareAttacked(__builtin_ctzll(king), enemy);
+}
+
+void Board::generateLegalMoves(std::vector<Move>& moves) const
+{
+    std::vector<Move> pseudoLegal;
+    generatePseudoLegalMoves(pseudoLegal);
+
+    Colors us = gameState.currentTurn;
+
+    // play each move on a copy of the board and throw it away if it leaves our king attacked
+    for (const Move& move : pseudoLegal)
+    {
+        Board temp = *this;
+        temp.makeMove(move);
+        if (!temp.isInCheck(us))
+        {
+            moves.push_back(move);
+        }
+    }
+}
+
 std::string moveToString(const Move& move)
 {
     std::string text;
