@@ -42,10 +42,10 @@ This is the most critical and time-consuming phase. Your engine must generate ev
   - **Castling:** Validate king/rook first-move rights, empty intervening squares, and ensure the King doesn't castle through check.
   - **En Passant:** Handle the unique diagonal capture of a pawn that just made a double-step.
   - **Promotions:** Allow pawns reaching the 8th/1st rank to promote to Q, R, B, or N.
-- [ ] **Legal Move Filtering & King Safety**
+- [✅] **Legal Move Filtering & King Safety**
   - Implement an `isSquareAttacked(int square, int attackerColor)` function.
   - Filter pseudo-legal moves by simulating each move on a temporary board state; if the moving side's King is left in check, discard the move.
-- [ ] **The Perft (Performance Test) Suite — *CRITICAL STEP***
+- [✅] **The Perft (Performance Test) Suite — *CRITICAL STEP***
   - Build a recursive node-counter function (`perft(depth)`) to count total leaf nodes from a given position.
   - Verify your engine's Perft numbers against published mathematical constants (e.g., Starting Position Depth 5 = `4,865,609` nodes; "Kiwipete" position Depth 4 = `4,085,603` nodes).
   - 🚨 *Do not proceed to Phase 3 until your Perft suite passes with 100% accuracy!*

@@ -25,6 +25,10 @@ class Board
     void generatePawnMoves(std::vector<Move>& moves) const; // pseudo-legal pawn pushes, captures, en passant and promotions for the side to move
     bool isSquareAttacked(int square, Colors attackerColor) const; // true if any attackerColor piece hits square
     void generateCastlingMoves(std::vector<Move>& moves) const; // castling moves for the side to move, encoded as the king's two-square move
+    void generatePseudoLegalMoves(std::vector<Move>& moves) const; // every move above, ignoring whether our king is left in check
+    void makeMove(const Move& move); // plays a move for the side to move and updates turn, rights, en passant and clocks
+    bool isInCheck(Colors color) const; // true if color's king is attacked
+    void generateLegalMoves(std::vector<Move>& moves) const; // pseudo-legal moves that don't leave our own king in check
 };
 
 std::string moveToString(const Move& move); // e.g. "a1a8", or "e7e8q" for a promotion
