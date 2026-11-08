@@ -55,7 +55,7 @@ This is the most critical and time-consuming phase. Your engine must generate ev
 ### Phase 3: Early UCI Protocol & GUI Integration
 With move generation proven bulletproof, implement a basic translator so your engine can talk to standard chess GUIs (like Arena, CuteChess, or En Passant). At this stage, your engine will simply pick a **random legal move**, allowing you to visually debug on a real chessboard!
 
-- [ ] **Standard I/O Command Loop**
+- [✅] **Standard I/O Command Loop**
   - Write a loop listening to `std::cin` for standard UCI text commands.
 - [ ] **Implement Core UCI Commands**
   - `uci` → Respond with engine name, author, and `uciok`.
