@@ -57,7 +57,7 @@ With move generation proven bulletproof, implement a basic translator so your en
 
 - [✅] **Standard I/O Command Loop**
   - Write a loop listening to `std::cin` for standard UCI text commands.
-- [ ] **Implement Core UCI Commands**
+- [✅] **Implement Core UCI Commands**
   - `uci` → Respond with engine name, author, and `uciok`.
   - `isready` → Respond with `readyok`.
   - `position startpos moves e2e4 ...` / `position fen ...` → Parse the board state and apply the list of played moves.
