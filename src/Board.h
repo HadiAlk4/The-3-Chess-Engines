@@ -29,6 +29,7 @@ class Board
     void makeMove(const Move& move); // plays a move for the side to move and updates turn, rights, en passant and clocks
     bool isInCheck(Colors color) const; // true if color's king is attacked
     void generateLegalMoves(std::vector<Move>& moves) const; // pseudo-legal moves that don't leave our own king in check
+    int evaluate() const; // material score in centipawns from White's perspective
 };
 
 std::string moveToString(const Move& move); // e.g. "a1a8", or "e7e8q" for a promotion

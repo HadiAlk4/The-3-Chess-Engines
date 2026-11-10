@@ -9,6 +9,8 @@ const int bishopDirections[4][2] = { {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
 const int knightOffsets[8][2] = { {2, 1}, {2, -1}, {-2, 1}, {-2, -1}, {1, 2}, {1, -2}, {-1, 2}, {-1, -2} };
 const int kingOffsets[8][2] = { {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1} };
 const Pieces promotionPieces[4] = { Pieces::queen, Pieces::rook, Pieces::bishop, Pieces::knight };
+// centipawn values indexed by Pieces (emptySquare, pawn, knight, bishop, rook, queen, king)
+const int pieceValues[7] = { 0, 100, 320, 330, 500, 900, 0 };
 
 // a pawn reaching the last rank becomes four moves, one per promotion piece
 static void addPawnMove(Move move, std::vector<Move>& moves)
@@ -715,6 +717,22 @@ void Board::generateLegalMoves(std::vector<Move>& moves) const
             moves.push_back(move);
         }
     }
+}
+
+int Board::evaluate() const
+{
+    bitBoard whitePieces = gameState.colorMasks[(int)Colors::white];
+    bitBoard blackPieces = gameState.colorMasks[(int)Colors::black];
+
+    int score = 0;
+    for (int piece = (int)Pieces::pawn; piece <= (int)Pieces::queen; piece++)
+    {
+        int whiteCount = __builtin_popcountll(gameState.pieceMasks[piece] & whitePieces);
+        int blackCount = __builtin_popcountll(gameState.pieceMasks[piece] & blackPieces);
+        score += (whiteCount - blackCount) * pieceValues[piece];
+    }
+
+    return score;
 }
 
 std::string moveToString(const Move& move)
