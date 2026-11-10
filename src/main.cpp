@@ -12,6 +12,7 @@ static const char* startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk
 //   ./engine print                   print the starting board
 //   ./engine perft                   run the perft suite (exit code 1 on any failure)
 //   ./engine divide <depth> [fen]    per-move node counts for debugging
+//   ./engine eval [fen]              print the static evaluation in centipawns
 int main(int argc, char* argv[]) {
     std::string command = (argc > 1) ? argv[1] : "";
 
@@ -33,6 +34,13 @@ int main(int argc, char* argv[]) {
         Board board;
         board.loadFEN((argc > 3) ? argv[3] : startFEN);
         perftDivide(board, std::atoi(argv[2]));
+        return 0;
+    }
+
+    if (command == "eval") {
+        Board board;
+        board.loadFEN((argc > 2) ? argv[2] : startFEN);
+        printf("%d\n", board.evaluate());
         return 0;
     }
 
