@@ -63,7 +63,7 @@ With move generation proven bulletproof, implement a basic translator so your en
   - `position startpos moves e2e4 ...` / `position fen ...` → Parse the board state and apply the list of played moves.
   - `go ...` → Generate all legal moves, pick one at **random** (for now), and output `bestmove <move>` (e.g., `bestmove g1f3`).
   - `quit` → Cleanly exit the program.
-- [ ] **GUI Setup & Visual Testing**
+- [✅] **GUI Setup & Visual Testing**
   - Load your compiled `.exe` / binary into a GUI and play a full game against your random-moving engine to confirm seamless communication.
 
 ---
@@ -71,7 +71,7 @@ With move generation proven bulletproof, implement a basic translator so your en
 ### Phase 4: Basic AI & The Search Tree
 Give the engine a brain. Now that it can communicate with a GUI, every improvement in this phase will be immediately noticeable in its playing strength.
 
-- [ ] **Material Evaluation Function**
+- [✅] **Material Evaluation Function**
   - Write an `evaluate()` function returning a score in centipawns from White's perspective (or relative to the side to move).
   - Basic values: Pawn = `100`, Knight = `320`, Bishop = `330`, Rook = `500`, Queen = `900`.
 - [ ] **Piece-Square Tables (PST)**
