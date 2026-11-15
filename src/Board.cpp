@@ -756,6 +756,11 @@ void Board::makeMove(const Move& move)
     gameState.currentTurn = isWhite ? Colors::black : Colors::white;
 }
 
+Colors Board::sideToMove() const
+{
+    return gameState.currentTurn;
+}
+
 bool Board::isInCheck(Colors color) const
 {
     bitBoard king = gameState.pieceMasks[(int)Pieces::king] & gameState.colorMasks[(int)color];

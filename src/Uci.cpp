@@ -1,8 +1,8 @@
 #include "Uci.h"
 #include "Board.h"
+#include "Search.h"
 
 #include <iostream>
-#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -85,22 +85,47 @@ static void handlePosition(Board& board, std::istringstream& tokens)
     }
 }
 
-// "go" ignores time and depth for now and answers with one random legal move
-static void handleGo(const Board& board)
+// "go" searches a fixed depth. "go depth N" uses N; otherwise the engine looks 3 plies ahead.
+// time controls are ignored until iterative deepening exists.
+static int depthFromGo(std::istringstream& tokens)
 {
-    std::vector<Move> moves;
-    board.generateLegalMoves(moves);
+    int depth = 3;
+    std::string token;
+    while (tokens >> token)
+    {
+        if (token == "depth")
+        {
+            int requested = 0;
+            if (tokens >> requested && requested > 0)
+            {
+                depth = requested;
+            }
+        }
+    }
+    return depth;
+}
 
-    if (moves.empty())
+static void handleGo(const Board& board, std::istringstream& tokens)
+{
+    int depth = depthFromGo(tokens);
+    SearchResult result = minimaxSearch(board, depth);
+
+    if (!result.hasMove)
     {
         // checkmate or stalemate: the GUI still expects a bestmove line
         std::cout << "bestmove (none)\n";
         return;
     }
 
-    static std::mt19937 rng(std::random_device{}());
-    std::uniform_int_distribution<int> pick(0, static_cast<int>(moves.size()) - 1);
-    std::cout << "bestmove " << moveToString(moves[pick(rng)]) << '\n';
+    // UCI scores are from the side to move, so flip a White-relative score when Black is searching
+    int score = result.score;
+    if (board.sideToMove() == Colors::black)
+    {
+        score = -score;
+    }
+
+    std::cout << "info depth " << depth << " score cp " << score << '\n';
+    std::cout << "bestmove " << moveToString(result.bestMove) << '\n';
 }
 
 void uciLoop()
@@ -168,7 +193,7 @@ void uciLoop()
 
         if (command == "go")
         {
-            handleGo(board);
+            handleGo(board, tokens);
             continue;
         }
 

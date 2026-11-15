@@ -28,6 +28,7 @@ class Board
     void generatePseudoLegalMoves(std::vector<Move>& moves) const; // every move above, ignoring whether our king is left in check
     void makeMove(const Move& move); // plays a move for the side to move and updates turn, rights, en passant and clocks
     bool isInCheck(Colors color) const; // true if color's king is attacked
+    Colors sideToMove() const;
     void generateLegalMoves(std::vector<Move>& moves) const; // pseudo-legal moves that don't leave our own king in check
     int evaluate() const; // material plus piece-square score in centipawns from White's perspective
 };

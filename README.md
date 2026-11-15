@@ -76,9 +76,9 @@ Give the engine a brain. Now that it can communicate with a GUI, every improveme
   - Basic values: Pawn = `100`, Knight = `320`, Bishop = `330`, Rook = `500`, Queen = `900`.
 - [✅] **Piece-Square Tables (PST)**
   - Add positional awareness using 8x8 integer grids. Reward Knights for central outposts (`+30`), penalize them on corners (`-50`), encourage pawns to advance, and push Kings to safety during the opening/middlegame.
-- [ ] **The Minimax Algorithm**
+- [✅] **The Minimax Algorithm**
   - Implement a recursive tree search that explores future moves to a fixed depth (e.g., Depth 3), maximizing the score for the engine and minimizing it for the opponent.
-- [ ] **Alpha-Beta Pruning**
+- [✅] **Alpha-Beta Pruning**
   - Add `alpha` and `beta` boundary variables to Minimax to instantly cut off branches where the opponent can force a refutation. This provides a ~10x–50x speedup, allowing real-time searches up to Depth 5 or 6!
 
 ---
