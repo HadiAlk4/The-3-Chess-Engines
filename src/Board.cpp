@@ -15,6 +15,19 @@ const int pieceValues[7] = { 0, 100, 320, 330, 500, 900, 0 };
 // piece-square tables are stored from White's point of view, a1 = index 0.
 // a Black piece reads the same table on the rank-flipped square (square ^ 56),
 // so a knight on a8 is scored like a White knight on a1.
+
+// pawns score more as they step forward, with a little extra on the center files.
+const int pawnTable[64] = {
+     0,  0,  0,  0,  0,  0,  0,  0,
+     0,  0,  0,  0,  0,  0,  0,  0,
+     5,  5, 10, 15, 15, 10,  5,  5,
+    10, 10, 15, 25, 25, 15, 10, 10,
+    15, 15, 20, 30, 30, 20, 15, 15,
+    20, 20, 25, 35, 35, 25, 20, 20,
+    30, 30, 35, 45, 45, 35, 30, 30,
+     0,  0,  0,  0,  0,  0,  0,  0
+};
+
 // corners are -50; the central outposts d4, e4, d5 and e5 are +30.
 const int knightTable[64] = {
     -50, -40, -30, -30, -30, -30, -40, -50,
@@ -30,7 +43,7 @@ const int knightTable[64] = {
 // indexed by Pieces. pieces without a table contribute material only.
 const int* pieceSquareTables[7] = {
     nullptr,
-    nullptr,
+    pawnTable,
     knightTable,
     nullptr,
     nullptr,
