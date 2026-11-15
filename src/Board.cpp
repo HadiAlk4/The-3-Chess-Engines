@@ -12,6 +12,50 @@ const Pieces promotionPieces[4] = { Pieces::queen, Pieces::rook, Pieces::bishop,
 // centipawn values indexed by Pieces (emptySquare, pawn, knight, bishop, rook, queen, king)
 const int pieceValues[7] = { 0, 100, 320, 330, 500, 900, 0 };
 
+// piece-square tables are stored from White's point of view, a1 = index 0.
+// a Black piece reads the same table on the rank-flipped square (square ^ 56),
+// so a knight on a8 is scored like a White knight on a1.
+// corners are -50; the central outposts d4, e4, d5 and e5 are +30.
+const int knightTable[64] = {
+    -50, -40, -30, -30, -30, -30, -40, -50,
+    -40, -20,   0,   5,   5,   0, -20, -40,
+    -30,   5,  10,  15,  15,  10,   5, -30,
+    -30,   0,  15,  30,  30,  15,   0, -30,
+    -30,   5,  15,  30,  30,  15,   5, -30,
+    -30,   0,  10,  15,  15,  10,   0, -30,
+    -40, -20,   0,   5,   5,   0, -20, -40,
+    -50, -40, -30, -30, -30, -30, -40, -50
+};
+
+// indexed by Pieces. pieces without a table contribute material only.
+const int* pieceSquareTables[7] = {
+    nullptr,
+    nullptr,
+    knightTable,
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr
+};
+
+// adds the table bonus for every piece in the bitboard.
+// fromWhite is false for Black, which flips the rank before looking up the square.
+static int tableScore(bitBoard pieces, const int table[64], bool fromWhite)
+{
+    int score = 0;
+    while (pieces)
+    {
+        int square = __builtin_ctzll(pieces);
+        if (!fromWhite)
+        {
+            square ^= 56;
+        }
+        score += table[square];
+        pieces &= pieces - 1;
+    }
+    return score;
+}
+
 // a pawn reaching the last rank becomes four moves, one per promotion piece
 static void addPawnMove(Move move, std::vector<Move>& moves)
 {
@@ -725,11 +769,19 @@ int Board::evaluate() const
     bitBoard blackPieces = gameState.colorMasks[(int)Colors::black];
 
     int score = 0;
-    for (int piece = (int)Pieces::pawn; piece <= (int)Pieces::queen; piece++)
+    for (int piece = (int)Pieces::pawn; piece <= (int)Pieces::king; piece++)
     {
-        int whiteCount = __builtin_popcountll(gameState.pieceMasks[piece] & whitePieces);
-        int blackCount = __builtin_popcountll(gameState.pieceMasks[piece] & blackPieces);
-        score += (whiteCount - blackCount) * pieceValues[piece];
+        bitBoard white = gameState.pieceMasks[piece] & whitePieces;
+        bitBoard black = gameState.pieceMasks[piece] & blackPieces;
+
+        score += (__builtin_popcountll(white) - __builtin_popcountll(black)) * pieceValues[piece];
+
+        const int* table = pieceSquareTables[piece];
+        if (table != nullptr)
+        {
+            score += tableScore(white, table, true);
+            score -= tableScore(black, table, false);
+        }
     }
 
     return score;
