@@ -40,6 +40,19 @@ const int knightTable[64] = {
     -50, -40, -30, -30, -30, -30, -40, -50
 };
 
+// opening and middlegame: reward a king on the back rank, especially c1 and g1
+// after castling, and penalize a king that has walked toward the center.
+const int kingTable[64] = {
+     10,  20,  25,   0,   0,  15,  25,  15,
+     10,  10,   0,  -5,  -5,   0,  10,  10,
+    -10, -15, -20, -25, -25, -20, -15, -10,
+    -20, -25, -30, -40, -40, -30, -25, -20,
+    -25, -30, -40, -50, -50, -40, -30, -25,
+    -25, -30, -40, -50, -50, -40, -30, -25,
+    -30, -40, -50, -60, -60, -50, -40, -30,
+    -30, -40, -50, -60, -60, -50, -40, -30
+};
+
 // indexed by Pieces. pieces without a table contribute material only.
 const int* pieceSquareTables[7] = {
     nullptr,
@@ -48,7 +61,7 @@ const int* pieceSquareTables[7] = {
     nullptr,
     nullptr,
     nullptr,
-    nullptr
+    kingTable
 };
 
 // adds the table bonus for every piece in the bitboard.
