@@ -63,8 +63,10 @@ static int gameOverScore(Colors sideToMove, int ply, bool inCheck)
 // a noisy position has a capture, a promotion, or a king in check.
 // standing pat means "stop and take the static score". that is always allowed when
 // not in check, so a bad capture can never score worse than doing nothing.
-static int quiescence(const Board& board, int ply, int alpha, int beta, int checkPly)
+static int quiescence(const Board& board, int ply, int alpha, int beta, int checkPly, uint64_t& nodes)
 {
+    nodes++;
+
     bool maximizing = board.sideToMove() == Colors::white;
     bool inCheck = board.isInCheck(board.sideToMove());
 
@@ -137,7 +139,7 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
     {
         Board next = board;
         next.makeMove(move);
-        int score = quiescence(next, ply + 1, alpha, beta, nextCheckPly);
+        int score = quiescence(next, ply + 1, alpha, beta, nextCheckPly, nodes);
 
         if (maximizing)
         {
@@ -176,16 +178,18 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
 // which is only used to prefer a faster mate.
 // alpha is the best score White can already force. beta is the best score Black can already force.
 // a score outside [alpha, beta] will never be chosen, so the rest of this node's moves are skipped.
-static SearchResult minimax(const Board& board, int depth, int ply, int alpha, int beta)
+static SearchResult minimax(const Board& board, int depth, int ply, int alpha, int beta, uint64_t& nodes)
 {
     SearchResult result{};
 
     // depth ran out. keep going through captures so a hanging piece is not "won" on the last ply.
     if (depth == 0)
     {
-        result.score = quiescence(board, ply, alpha, beta, quiescenceCheckPly);
+        result.score = quiescence(board, ply, alpha, beta, quiescenceCheckPly, nodes);
         return result;
     }
+
+    nodes++;
 
     std::vector<Move> moves;
     board.generateLegalMoves(moves);
@@ -206,7 +210,7 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
     {
         Board next = board;
         next.makeMove(move);
-        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta);
+        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, nodes);
 
         bool better = !found || (maximizing ? child.score > result.score : child.score < result.score);
         if (better)
@@ -246,5 +250,9 @@ SearchResult minimaxSearch(const Board& board, int depth)
         depth = 1;
     }
 
-    return minimax(board, depth, 0, -infinite, infinite);
+    uint64_t nodes = 0;
+    SearchResult result = minimax(board, depth, 0, -infinite, infinite, nodes);
+    result.depth = depth;
+    result.nodes = nodes;
+    return result;
 }
