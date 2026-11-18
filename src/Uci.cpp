@@ -85,30 +85,149 @@ static void handlePosition(Board& board, std::istringstream& tokens)
     }
 }
 
-// "go" searches a fixed depth. "go depth N" uses N; otherwise the engine looks 3 plies ahead.
-// time controls are ignored until iterative deepening exists.
-static int depthFromGo(std::istringstream& tokens)
+// the fields of "go" this engine understands. -1 means the GUI did not send that field.
+struct GoCommand
 {
-    int depth = 3;
+    int depth = 0;
+    int wtime = -1;
+    int btime = -1;
+    int winc = 0;
+    int binc = 0;
+    int movestogo = 0;
+    int movetime = -1;
+};
+
+static GoCommand parseGo(std::istringstream& tokens)
+{
+    GoCommand go;
     std::string token;
     while (tokens >> token)
     {
         if (token == "depth")
         {
-            int requested = 0;
-            if (tokens >> requested && requested > 0)
+            int value = 0;
+            if (tokens >> value && value > 0)
             {
-                depth = requested;
+                go.depth = value;
+            }
+        }
+        else if (token == "movetime")
+        {
+            int value = 0;
+            if (tokens >> value && value >= 0)
+            {
+                go.movetime = value;
+            }
+        }
+        else if (token == "wtime")
+        {
+            int value = 0;
+            if (tokens >> value && value >= 0)
+            {
+                go.wtime = value;
+            }
+        }
+        else if (token == "btime")
+        {
+            int value = 0;
+            if (tokens >> value && value >= 0)
+            {
+                go.btime = value;
+            }
+        }
+        else if (token == "winc")
+        {
+            int value = 0;
+            if (tokens >> value && value >= 0)
+            {
+                go.winc = value;
+            }
+        }
+        else if (token == "binc")
+        {
+            int value = 0;
+            if (tokens >> value && value >= 0)
+            {
+                go.binc = value;
+            }
+        }
+        else if (token == "movestogo")
+        {
+            int value = 0;
+            if (tokens >> value && value > 0)
+            {
+                go.movestogo = value;
             }
         }
     }
-    return depth;
+    return go;
+}
+
+// how many milliseconds this move may think. -1 means the GUI sent no clock.
+// with a clock, use about one share of the time left plus the increment,
+// and never more than half of what is left, so one move cannot spend the game.
+static int thinkTimeMs(Colors side, const GoCommand& go)
+{
+    if (go.movetime >= 0)
+    {
+        return go.movetime;
+    }
+
+    int remaining = (side == Colors::white) ? go.wtime : go.btime;
+    if (remaining < 0)
+    {
+        return -1;
+    }
+
+    int increment = (side == Colors::white) ? go.winc : go.binc;
+    int shares = go.movestogo > 0 ? go.movestogo : 20;
+    int budget = remaining / shares + increment;
+    int half = remaining / 2;
+    if (budget > half)
+    {
+        budget = half;
+    }
+    if (budget < 0)
+    {
+        budget = 0;
+    }
+    return budget;
+}
+
+// set for the duration of one "go", so each finished depth can be printed
+// from the side to move's point of view.
+static Colors reportingSide = Colors::white;
+
+static void reportDepth(const SearchResult& result, int elapsedMs)
+{
+    int score = result.score;
+    if (reportingSide == Colors::black)
+    {
+        score = -score;
+    }
+
+    std::cout << "info depth " << result.depth
+              << " score cp " << score
+              << " nodes " << result.nodes
+              << " time " << elapsedMs
+              << " pv " << moveToString(result.bestMove) << '\n';
 }
 
 static void handleGo(const Board& board, std::istringstream& tokens)
 {
-    int depth = depthFromGo(tokens);
-    SearchResult result = minimaxSearch(board, depth);
+    GoCommand go = parseGo(tokens);
+
+    SearchLimits limits;
+    limits.timeMs = thinkTimeMs(board.sideToMove(), go);
+    limits.maxDepth = go.depth;
+    // a bare "go" still looks 3 plies ahead, now by walking 1, then 2, then 3
+    if (limits.timeMs < 0 && limits.maxDepth < 1)
+    {
+        limits.maxDepth = 3;
+    }
+
+    reportingSide = board.sideToMove();
+    SearchResult result = iterativeSearch(board, limits, reportDepth);
 
     if (!result.hasMove)
     {
@@ -117,14 +236,6 @@ static void handleGo(const Board& board, std::istringstream& tokens)
         return;
     }
 
-    // UCI scores are from the side to move, so flip a White-relative score when Black is searching
-    int score = result.score;
-    if (board.sideToMove() == Colors::black)
-    {
-        score = -score;
-    }
-
-    std::cout << "info depth " << depth << " score cp " << score << '\n';
     std::cout << "bestmove " << moveToString(result.bestMove) << '\n';
 }
 
