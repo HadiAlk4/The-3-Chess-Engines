@@ -64,6 +64,116 @@ const int* pieceSquareTables[7] = {
     kingTable
 };
 
+// one random key per fact that distinguishes a position. xoring a key in and out
+// updates the hash when that fact changes, which is Zobrist hashing.
+struct Zobrist
+{
+    uint64_t piece[2][7][64] = {};
+    uint64_t castle[4] = {};
+    uint64_t epFile[8] = {};
+    uint64_t side = 0;
+};
+
+static uint64_t mixKey(uint64_t& state)
+{
+    uint64_t z = (state += 0x9E3779B97F4A7C15ULL);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+
+static Zobrist makeZobrist()
+{
+    Zobrist keys;
+    uint64_t state = 0xA5A5F00D12345678ULL;
+
+    for (int color = 0; color < 2; color++)
+    {
+        for (int piece = 1; piece <= 6; piece++)
+        {
+            for (int square = 0; square < 64; square++)
+            {
+                keys.piece[color][piece][square] = mixKey(state);
+            }
+        }
+    }
+
+    for (int right = 0; right < 4; right++)
+    {
+        keys.castle[right] = mixKey(state);
+    }
+    for (int file = 0; file < 8; file++)
+    {
+        keys.epFile[file] = mixKey(state);
+    }
+    keys.side = mixKey(state);
+    return keys;
+}
+
+static const Zobrist& zobrist()
+{
+    static const Zobrist keys = makeZobrist();
+    return keys;
+}
+
+static void xorPiece(BoardState& state, int color, Pieces piece, int square)
+{
+    state.hash ^= zobrist().piece[color][(int)piece][square];
+}
+
+static void xorCastling(BoardState& state)
+{
+    const Zobrist& keys = zobrist();
+    if (state.castleWhiteKing) state.hash ^= keys.castle[0];
+    if (state.castleWhiteQueen) state.hash ^= keys.castle[1];
+    if (state.castleBlackKing) state.hash ^= keys.castle[2];
+    if (state.castleBlackQueen) state.hash ^= keys.castle[3];
+}
+
+static void xorEnPassant(BoardState& state)
+{
+    if (state.enPassantTargetSquare < 64)
+    {
+        state.hash ^= zobrist().epFile[state.enPassantTargetSquare & 7];
+    }
+}
+
+// rebuilt from the pieces currently on the board. used after loadFEN, and to
+// check that makeMove's incremental updates never drift.
+static uint64_t computeZobrist(const BoardState& state)
+{
+    uint64_t hash = 0;
+    const Zobrist& keys = zobrist();
+
+    for (int color = 0; color < 2; color++)
+    {
+        for (int piece = 1; piece <= 6; piece++)
+        {
+            bitBoard pieces = state.pieceMasks[piece] & state.colorMasks[color];
+            while (pieces)
+            {
+                int square = __builtin_ctzll(pieces);
+                pieces &= pieces - 1;
+                hash ^= keys.piece[color][piece][square];
+            }
+        }
+    }
+
+    if (state.castleWhiteKing) hash ^= keys.castle[0];
+    if (state.castleWhiteQueen) hash ^= keys.castle[1];
+    if (state.castleBlackKing) hash ^= keys.castle[2];
+    if (state.castleBlackQueen) hash ^= keys.castle[3];
+    if (state.enPassantTargetSquare < 64)
+    {
+        hash ^= keys.epFile[state.enPassantTargetSquare & 7];
+    }
+    if (state.currentTurn == Colors::black)
+    {
+        hash ^= keys.side;
+    }
+    return hash;
+}
+
 // adds the table bonus for every piece in the bitboard.
 // fromWhite is false for Black, which flips the rank before looking up the square.
 static int tableScore(bitBoard pieces, const int table[64], bool fromWhite)
@@ -118,6 +228,7 @@ void Board::clearBoard()
     gameState.enPassantTargetSquare = 200;
     gameState.halfMoveCount = 0;
     gameState.fullMoveCount = 1;
+    gameState.hash = 0;
 
 }
 
@@ -268,9 +379,7 @@ void Board::loadFEN(const std::string& fen) {
 
     gameState.halfMoveCount = std::stoi(halfMove);
     gameState.fullMoveCount = std:: stoi(fullMove);
-
-
-
+    gameState.hash = computeZobrist(gameState);
 }
 void Board::addSliderMoves(int square, Pieces piece, const int directions[][2], int directionCount, std::vector<Move>& moves) const
 {
@@ -683,22 +792,31 @@ void Board::makeMove(const Move& move)
     bitBoard sourceMask = 1ULL << source;
     bitBoard targetMask = 1ULL << target;
 
+    // take the old rights and en passant file out of the hash. the new ones are
+    // mixed back in after the move has updated them.
+    xorEnPassant(gameState);
+    xorCastling(gameState);
+
     // remove the captured piece first, en passant takes the pawn behind the target square
     if (move.wasEnPassant)
     {
         int capturedSquare = target + (isWhite ? -8 : 8);
         bitBoard capturedMask = 1ULL << capturedSquare;
+        xorPiece(gameState, them, Pieces::pawn, capturedSquare);
         gameState.pieceMasks[(int)Pieces::pawn] &= ~capturedMask;
         gameState.colorMasks[them] &= ~capturedMask;
     }
     else if (move.capturedPiece != Pieces::emptySquare)
     {
+        xorPiece(gameState, them, move.capturedPiece, target);
         gameState.pieceMasks[(int)move.capturedPiece] &= ~targetMask;
         gameState.colorMasks[them] &= ~targetMask;
     }
 
     // lift the piece off its square and drop it (or its promotion) on the target
     Pieces landingPiece = (move.promotionPiece != Pieces::emptySquare) ? move.promotionPiece : move.movedPiece;
+    xorPiece(gameState, us, move.movedPiece, source);
+    xorPiece(gameState, us, landingPiece, target);
     gameState.pieceMasks[(int)move.movedPiece] &= ~sourceMask;
     gameState.colorMasks[us] &= ~sourceMask;
     gameState.pieceMasks[(int)landingPiece] |= targetMask;
@@ -710,6 +828,8 @@ void Board::makeMove(const Move& move)
         bool kingSide = target > source;
         int rookFrom = kingSide ? source + 3 : source - 4; // h-file or a-file
         int rookTo = kingSide ? source + 1 : source - 1;   // f-file or d-file
+        xorPiece(gameState, us, Pieces::rook, rookFrom);
+        xorPiece(gameState, us, Pieces::rook, rookTo);
         bitBoard rookMove = (1ULL << rookFrom) | (1ULL << rookTo);
         gameState.pieceMasks[(int)Pieces::rook] ^= rookMove;
         gameState.colorMasks[us] ^= rookMove;
@@ -753,7 +873,46 @@ void Board::makeMove(const Move& move)
         gameState.fullMoveCount++;
     }
 
+    xorCastling(gameState);
+    xorEnPassant(gameState);
+    gameState.hash ^= zobrist().side;
     gameState.currentTurn = isWhite ? Colors::black : Colors::white;
+}
+
+uint64_t Board::zobristKey() const
+{
+    return gameState.hash;
+}
+
+bool Board::zobristValid() const
+{
+    return gameState.hash == computeZobrist(gameState);
+}
+
+void Board::makeNullMove()
+{
+    // passing clears en passant and hands the turn over. castling rights stay.
+    xorEnPassant(gameState);
+    gameState.enPassantTargetSquare = 200;
+
+    if (gameState.currentTurn == Colors::black)
+    {
+        gameState.fullMoveCount++;
+    }
+    gameState.halfMoveCount++;
+
+    gameState.hash ^= zobrist().side;
+    gameState.currentTurn = (gameState.currentTurn == Colors::white) ? Colors::black : Colors::white;
+}
+
+bool Board::hasNonPawnMaterial(Colors color) const
+{
+    bitBoard ours = gameState.colorMasks[(int)color];
+    bitBoard pieces = gameState.pieceMasks[(int)Pieces::knight]
+        | gameState.pieceMasks[(int)Pieces::bishop]
+        | gameState.pieceMasks[(int)Pieces::rook]
+        | gameState.pieceMasks[(int)Pieces::queen];
+    return (pieces & ours) != 0;
 }
 
 Colors Board::sideToMove() const

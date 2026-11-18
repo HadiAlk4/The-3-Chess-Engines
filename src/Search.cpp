@@ -106,6 +106,177 @@ static void preferMove(std::vector<Move>& moves, const Move& preferred)
     }
 }
 
+// a million slots. each one keeps the score of a position so a later visit,
+// from a different move order, can reuse it. 64-bit keys make a false match rare,
+// and a slot is only trusted when the full key matches.
+static const size_t ttSlots = 1u << 20;
+static const uint8_t ttExact = 0;
+static const uint8_t ttLower = 1; // true score is at least the stored score
+static const uint8_t ttUpper = 2; // true score is at most the stored score
+
+// mates sit within a few plies of mateScore. anything past this is a real evaluation.
+static const int mateBound = mateScore - 1000;
+
+struct TTEntry
+{
+    uint64_t key = 0;
+    int32_t score = 0;
+    int16_t depth = -1;
+    uint8_t flag = ttExact;
+    uint8_t generation = 0;
+    uint8_t from = 0;
+    uint8_t to = 0;
+    uint8_t promo = 0;
+    uint8_t hasMove = 0;
+};
+
+static std::vector<TTEntry> transposition;
+static uint8_t ttGeneration = 0;
+
+// the stored mate distance is from this node, not from the root, so the same
+// mate can be reused at a different depth in the tree.
+static int scoreToTable(int score, int ply)
+{
+    if (score > mateBound)
+    {
+        return score + ply;
+    }
+    if (score < -mateBound)
+    {
+        return score - ply;
+    }
+    return score;
+}
+
+static int scoreFromTable(int score, int ply)
+{
+    if (score > mateBound)
+    {
+        return score - ply;
+    }
+    if (score < -mateBound)
+    {
+        return score + ply;
+    }
+    return score;
+}
+
+static uint8_t boundFlag(int score, int alpha, int beta)
+{
+    if (score <= alpha)
+    {
+        return ttUpper;
+    }
+    if (score >= beta)
+    {
+        return ttLower;
+    }
+    return ttExact;
+}
+
+struct TTLook
+{
+    bool cutoff = false;
+    int score = 0;
+    Move move{};
+    bool hasMove = false;
+};
+
+static TTLook readTable(uint64_t key, int depth, int ply, int alpha, int beta)
+{
+    TTLook look;
+    if (transposition.empty())
+    {
+        return look;
+    }
+
+    const TTEntry& entry = transposition[key & (transposition.size() - 1)];
+    if (entry.depth < 0 || entry.key != key)
+    {
+        return look;
+    }
+
+    if (entry.hasMove)
+    {
+        look.hasMove = true;
+        look.move.sourceSquare = entry.from;
+        look.move.targetSquare = entry.to;
+        look.move.promotionPiece = static_cast<Pieces>(entry.promo);
+    }
+
+    // a shallower search is not a proof for this depth, but its move is still
+    // worth trying first.
+    if (entry.depth < depth)
+    {
+        return look;
+    }
+
+    int score = scoreFromTable(entry.score, ply);
+    bool proves = entry.flag == ttExact
+        || (entry.flag == ttLower && score >= beta)
+        || (entry.flag == ttUpper && score <= alpha);
+    if (proves)
+    {
+        look.cutoff = true;
+        look.score = score;
+    }
+    return look;
+}
+
+static void storeTable(uint64_t key, int depth, int ply, int score, uint8_t flag, const Move* move)
+{
+    if (transposition.empty())
+    {
+        return;
+    }
+
+    TTEntry& entry = transposition[key & (transposition.size() - 1)];
+    bool samePosition = entry.key == key;
+    // keep a deeper entry from this search. an older search loses its slot.
+    if (entry.depth > depth && (samePosition || entry.generation == ttGeneration))
+    {
+        return;
+    }
+
+    entry.key = key;
+    entry.score = scoreToTable(score, ply);
+    entry.depth = static_cast<int16_t>(depth);
+    entry.flag = flag;
+    entry.generation = ttGeneration;
+    entry.hasMove = move != nullptr;
+    if (move != nullptr)
+    {
+        entry.from = move->sourceSquare;
+        entry.to = move->targetSquare;
+        entry.promo = static_cast<uint8_t>(move->promotionPiece);
+    }
+}
+
+static void beginSearch()
+{
+    if (transposition.empty())
+    {
+        transposition.resize(ttSlots);
+    }
+
+    ttGeneration++;
+    // the counter wrapped, so old slots would look current again. drop them.
+    if (ttGeneration == 0)
+    {
+        std::fill(transposition.begin(), transposition.end(), TTEntry{});
+        ttGeneration = 1;
+    }
+}
+
+void clearSearchState()
+{
+    if (!transposition.empty())
+    {
+        std::fill(transposition.begin(), transposition.end(), TTEntry{});
+    }
+    ttGeneration = 0;
+}
+
 // no legal move ends the game. check is a loss for the side about to move; otherwise it is stalemate.
 static int gameOverScore(Colors sideToMove, int ply, bool inCheck)
 {
@@ -131,6 +302,15 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
         return 0;
     }
 
+    int alphaStart = alpha;
+    int betaStart = beta;
+    uint64_t key = board.zobristKey();
+    TTLook remembered = readTable(key, 0, ply, alpha, beta);
+    if (remembered.cutoff)
+    {
+        return remembered.score;
+    }
+
     bool maximizing = board.sideToMove() == Colors::white;
     bool inCheck = board.isInCheck(board.sideToMove());
 
@@ -139,7 +319,9 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
 
     if (moves.empty())
     {
-        return gameOverScore(board.sideToMove(), ply, inCheck);
+        int score = gameOverScore(board.sideToMove(), ply, inCheck);
+        storeTable(key, 0, ply, score, ttExact, nullptr);
+        return score;
     }
 
     int standPat = board.evaluate();
@@ -152,6 +334,7 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
         {
             if (standPat >= beta)
             {
+                storeTable(key, 0, ply, standPat, ttLower, nullptr);
                 return standPat;
             }
             if (standPat > alpha)
@@ -163,6 +346,7 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
         {
             if (standPat <= alpha)
             {
+                storeTable(key, 0, ply, standPat, ttUpper, nullptr);
                 return standPat;
             }
             if (standPat < beta)
@@ -184,19 +368,27 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
         // nothing left to capture or promote, so the position is quiet
         if (moves.empty())
         {
+            storeTable(key, 0, ply, standPat, ttExact, nullptr);
             return standPat;
         }
     }
     else if (checkPly == 0)
     {
         // still in check, but the extra check budget is spent. take the eval and stop.
+        // this is a guess, not a searched score, so it is not stored.
         return standPat;
     }
 
     orderMoves(moves);
+    if (remembered.hasMove)
+    {
+        preferMove(moves, remembered.move);
+    }
 
     // in check there is no "do nothing", so start from a score any legal reply can beat
     int best = inCheck ? (maximizing ? -infinite : infinite) : standPat;
+    Move bestMove{};
+    bool hasBest = false;
     int nextCheckPly = inCheck ? checkPly - 1 : checkPly;
 
     for (const Move& move : moves)
@@ -214,6 +406,8 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
             if (score > best)
             {
                 best = score;
+                bestMove = move;
+                hasBest = true;
             }
             if (best > alpha)
             {
@@ -225,6 +419,8 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
             if (score < best)
             {
                 best = score;
+                bestMove = move;
+                hasBest = true;
             }
             if (best < beta)
             {
@@ -239,6 +435,7 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
         }
     }
 
+    storeTable(key, 0, ply, best, boundFlag(best, alphaStart, betaStart), hasBest ? &bestMove : nullptr);
     return best;
 }
 
@@ -247,7 +444,7 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
 // alpha is the best score White can already force. beta is the best score Black can already force.
 // a score outside [alpha, beta] will never be chosen, so the rest of this node's moves are skipped.
 static SearchResult minimax(const Board& board, int depth, int ply, int alpha, int beta,
-                            SearchClock& clock, const Move* preferred)
+                            SearchClock& clock, const Move* preferred, bool allowNull)
 {
     SearchResult result{};
 
@@ -263,24 +460,91 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
         return result;
     }
 
-    std::vector<Move> moves;
-    board.generateLegalMoves(moves);
-
-    if (moves.empty())
+    int alphaStart = alpha;
+    int betaStart = beta;
+    uint64_t key = board.zobristKey();
+    TTLook remembered = readTable(key, depth, ply, alpha, beta);
+    // the root needs a move it can play. an internal node can stop on a score alone.
+    if (remembered.cutoff && (ply > 0 || remembered.hasMove))
     {
-        result.score = gameOverScore(board.sideToMove(), ply, board.isInCheck(board.sideToMove()));
+        result.score = remembered.score;
+        result.bestMove = remembered.move;
+        result.hasMove = remembered.hasMove;
         return result;
     }
 
+    std::vector<Move> moves;
+    board.generateLegalMoves(moves);
+
+    bool inCheck = board.isInCheck(board.sideToMove());
+    if (moves.empty())
+    {
+        result.score = gameOverScore(board.sideToMove(), ply, inCheck);
+        storeTable(key, depth, ply, result.score, ttExact, nullptr);
+        return result;
+    }
+
+    // White wants the highest score. Black wants the lowest, because the score is from White's point of view.
+    bool maximizing = board.sideToMove() == Colors::white;
+
+    // give the opponent a free move. if the position is still good enough to
+    // beat the window, every real move would be too, so the rest of this node
+    // can be skipped. a king and pawns is left out: passing can be the losing move.
+    if (allowNull && ply > 0 && depth >= 3 && !inCheck && board.hasNonPawnMaterial(board.sideToMove()))
+    {
+        int standing = board.evaluate();
+        bool alreadyGood = maximizing ? standing >= beta : standing <= alpha;
+        if (alreadyGood)
+        {
+            int reduction = (depth >= 6) ? 3 : 2;
+            int nullDepth = depth - 1 - reduction;
+            if (nullDepth < 0)
+            {
+                nullDepth = 0;
+            }
+
+            Board next = board;
+            next.makeNullMove();
+            // a narrow window: we only care whether the skip clears the cutoff.
+            int nullAlpha = maximizing ? beta - 1 : alpha;
+            int nullBeta = maximizing ? beta : alpha + 1;
+            SearchResult skipped = minimax(next, nullDepth, ply + 1, nullAlpha, nullBeta, clock, nullptr, false);
+            if (clock.stop)
+            {
+                return result;
+            }
+
+            if (maximizing && skipped.score >= beta)
+            {
+                result.score = beta;
+                storeTable(key, depth, ply, beta, ttLower, nullptr);
+                return result;
+            }
+            if (!maximizing && skipped.score <= alpha)
+            {
+                result.score = alpha;
+                storeTable(key, depth, ply, alpha, ttUpper, nullptr);
+                return result;
+            }
+        }
+    }
+
     orderMoves(moves);
+    // the move that worked in an earlier search goes first, then the previous
+    // iteration's choice at the root, which wins if both are set.
+    if (remembered.hasMove)
+    {
+        preferMove(moves, remembered.move);
+    }
     if (ply == 0 && preferred != nullptr)
     {
         preferMove(moves, *preferred);
     }
 
-    // White wants the highest score. Black wants the lowest, because the score is from White's point of view.
-    bool maximizing = board.sideToMove() == Colors::white;
     bool found = false;
+    // captures are always searched in full. this counts quiet moves so a capture
+    // does not push the best quiet move into the reduced tail.
+    int quietCount = 0;
 
     for (const Move& move : moves)
     {
@@ -294,10 +558,57 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
 
         Board next = board;
         next.makeMove(move);
-        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, clock, nullptr);
+
+        // quiet moves late in the list are usually bad. search them one ply
+        // shallower, and only pay for the full depth if that still looks good.
+        // the root and the first few moves stay at full depth so the best line
+        // is not guessed.
+        int reduction = 0;
+        bool lateQuiet = ply > 0 && depth >= 4 && quietCount >= 3 && !inCheck
+            && !isTactical(move) && (beta - alpha > 1)
+            && !next.isInCheck(next.sideToMove());
+        if (lateQuiet)
+        {
+            reduction = 1;
+        }
+
+        int childAlpha = alpha;
+        int childBeta = beta;
+        if (reduction > 0)
+        {
+            // a one-point window is enough to learn whether the move can matter.
+            if (maximizing)
+            {
+                childBeta = alpha + 1;
+            }
+            else
+            {
+                childAlpha = beta - 1;
+            }
+        }
+
+        SearchResult child = minimax(next, depth - 1 - reduction, ply + 1, childAlpha, childBeta, clock, nullptr, true);
         if (clock.stop)
         {
             return result;
+        }
+
+        if (reduction > 0)
+        {
+            bool stillGood = maximizing ? child.score > alpha : child.score < beta;
+            if (stillGood)
+            {
+                child = minimax(next, depth - 1, ply + 1, alpha, beta, clock, nullptr, true);
+                if (clock.stop)
+                {
+                    return result;
+                }
+            }
+        }
+
+        if (!isTactical(move))
+        {
+            quietCount++;
         }
 
         bool better = !found || (maximizing ? child.score > result.score : child.score < result.score);
@@ -328,6 +639,8 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
         }
     }
 
+    storeTable(key, depth, ply, result.score, boundFlag(result.score, alphaStart, betaStart),
+               result.hasMove ? &result.bestMove : nullptr);
     return result;
 }
 
@@ -339,7 +652,8 @@ SearchResult minimaxSearch(const Board& board, int depth)
     }
 
     SearchClock clock;
-    SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, nullptr);
+    beginSearch();
+    SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, nullptr, true);
     result.depth = depth;
     result.nodes = clock.nodes;
     return result;
@@ -366,6 +680,8 @@ SearchResult iterativeSearch(const Board& board, const SearchLimits& limits, Dep
 
     SearchClock clock;
     clock.deadline = deadline;
+    // one table for every depth, so depth 4 can reuse what depth 3 already proved.
+    beginSearch();
 
     SearchResult finished{};
     Move previousBest{};
@@ -382,7 +698,7 @@ SearchResult iterativeSearch(const Board& board, const SearchLimits& limits, Dep
         clock.stop = false;
 
         const Move* preferred = hasPrevious ? &previousBest : nullptr;
-        SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, preferred);
+        SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, preferred, true);
 
         // a depth that stops halfway has only scored some of its moves, so its
         // best move is not trustworthy. keep the last depth that finished.

@@ -31,6 +31,10 @@ class Board
     Colors sideToMove() const;
     void generateLegalMoves(std::vector<Move>& moves) const; // pseudo-legal moves that don't leave our own king in check
     int evaluate() const; // material plus piece-square score in centipawns from White's perspective
+    uint64_t zobristKey() const; // position hash; equal when two move orders reach the same board
+    bool zobristValid() const; // incremental hash still matches a from-scratch rebuild
+    void makeNullMove(); // pass the turn. null-move pruning uses this to see if the position is already winning
+    bool hasNonPawnMaterial(Colors color) const; // false for a king and pawns, where passing the turn is unsafe
 };
 
 std::string moveToString(const Move& move); // e.g. "a1a8", or "e7e8q" for a promotion

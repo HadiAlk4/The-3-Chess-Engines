@@ -57,6 +57,9 @@ struct BoardState
     uint8_t halfMoveCount = 0; // resets after pawn move or capture 
     uint8_t fullMoveCount = 1; // adds one everytime black finishes thier turn to track what turn the game is currently on 
 
+    // mixed incrementally as pieces move. same position reached two ways shares one key.
+    uint64_t hash = 0;
+
 };
 
 #endif

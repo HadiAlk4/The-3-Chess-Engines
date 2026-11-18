@@ -33,6 +33,10 @@ using DepthFinishedFn = void (*)(const SearchResult& result, int elapsedMs);
 // depth is in plies (a full move is 2). At depth 0, captures keep being
 // searched until the position is quiet, so a capture on the horizon is
 // not scored until the recapture is seen.
+// A position reached by two different move orders is searched once and then
+// read back from the transposition table. Quiet moves late in the ordering are
+// searched a ply shallower, and a position that still beats the window after
+// passing the turn is pruned.
 // This searches exactly `depth` plies and ignores the clock.
 SearchResult minimaxSearch(const Board& board, int depth);
 
@@ -40,5 +44,8 @@ SearchResult minimaxSearch(const Board& board, int depth);
 // if the clock runs out in the middle of a depth, that depth is discarded
 // and the move from the last finished depth is returned.
 SearchResult iterativeSearch(const Board& board, const SearchLimits& limits, DepthFinishedFn onDepth = nullptr);
+
+// drops remembered positions. a new game must not reuse the previous game's scores.
+void clearSearchState();
 
 #endif

@@ -289,10 +289,11 @@ void uciLoop()
             continue;
         }
 
-        // sent before a new game; there is no search state to clear yet, so just reset the board
+        // the previous game's table would otherwise answer positions from this one
         if (command == "ucinewgame")
         {
             board.loadFEN(startFEN);
+            clearSearchState();
             continue;
         }
 
