@@ -88,7 +88,7 @@ To transition from a beginner bot to a sharp, tactical medium-strength engine, w
 
 - [✅] **Move Ordering (MVV-LVA)**
   - Alpha-Beta pruning is most efficient when best moves are searched first. Sort generated moves before searching using **Most Valuable Victim - Least Valuable Attacker** (e.g., search P × Q first, quiet moves last).
-- [ ] **Quiescence Search**
+- [✅] **Quiescence Search**
   - Solve the "Horizon Effect" (where the engine searches to Depth 4, sees it won a piece, but misses that it gets recaptured on Depth 5).
   - When the main search hits depth limit, launch a mini-search that *only evaluates tactical captures* until the board reaches a "quiet" state.
 - [ ] **Iterative Deepening & Time Management**
