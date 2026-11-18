@@ -1,5 +1,6 @@
 #include "Search.h"
 
+#include <algorithm>
 #include <vector>
 
 // bigger than any material or piece-square total, so a checkmate always outranks a capture.
@@ -8,6 +9,32 @@ static const int mateScore = 100000;
 
 // one past the largest mate score, so the root window never cuts off a real result.
 static const int infinite = mateScore + 1;
+
+// victim values, indexed by Pieces. the king is never captured.
+static const int victimValue[7] = { 0, 100, 320, 330, 500, 900, 0 };
+// cheaper attackers sort first: pawn, knight, bishop, rook, queen, king.
+static const int attackerRank[7] = { 0, 1, 2, 3, 4, 5, 6 };
+
+// Most Valuable Victim, Least Valuable Attacker. quiet moves score 0 and stay last.
+// pawn takes queen is 8999, queen takes pawn is 995.
+static int mvvLva(const Move& move)
+{
+    if (move.capturedPiece == Pieces::emptySquare)
+    {
+        return 0;
+    }
+
+    return victimValue[(int)move.capturedPiece] * 10 - attackerRank[(int)move.movedPiece];
+}
+
+static void orderMoves(std::vector<Move>& moves)
+{
+    // best captures first, so alpha-beta can refute the other moves and skip them
+    std::stable_sort(moves.begin(), moves.end(), [](const Move& a, const Move& b)
+    {
+        return mvvLva(a) > mvvLva(b);
+    });
+}
 
 // one node of the tree. ply is how many moves we have already played from the root,
 // which is only used to prefer a faster mate.
@@ -37,6 +64,8 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
         result.score = board.evaluate();
         return result;
     }
+
+    orderMoves(moves);
 
     // White wants the highest score. Black wants the lowest, because the score is from White's point of view.
     bool maximizing = board.sideToMove() == Colors::white;
