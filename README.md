@@ -4,6 +4,59 @@ Welcome to the development roadmap for building a clean, medium-strength chess e
 
 This repository follows an **incremental, milestone-driven architecture**. Each phase builds directly on the previous one, ensuring mathematical correctness and bug-free logic before adding AI complexity. 
 
+## Measured strength
+
+These numbers are from one run of the current `main` build. The Elo figures later in the roadmap are targets. This engine has not played a rated match, so it has no measured Elo.
+
+It plays legal chess, finds short mates and hanging pieces, and a 4-ply search beats a 1-ply search of the same engine. The evaluation is material plus piece-square tables for pawns, knights, and the king, so the playing strength is tactical.
+
+### Perft
+
+`./engine perft` matched the published node counts on all 7 positions:
+
+| Position | Depth | Nodes | Time |
+| :--- | ---: | ---: | ---: |
+| Start position | 5 | 4,865,609 | 255 ms |
+| Kiwipete | 4 | 4,085,603 | 203 ms |
+| Position 3 | 6 | 11,030,083 | 816 ms |
+| Position 4 | 5 | 15,833,292 | 793 ms |
+| Position 4 mirrored | 5 | 15,833,292 | 806 ms |
+| Position 5 | 4 | 2,103,487 | 106 ms |
+| Position 6 | 4 | 3,894,594 | 171 ms |
+
+57,645,960 nodes in 3.15 seconds, 7/7 passed.
+
+### Hash
+
+`./engine hash` passed 7/7. The incremental Zobrist key matched a from-scratch rebuild through the start position to depth 4, Kiwipete to depth 3, and a promotion position to depth 3. Two move orders of the Italian Game produced the same key, and a one-step pawn move hashed differently from a double step because of the en passant file.
+
+### Search speed
+
+From the start position, scores in centipawns from White's side. Node counts include the shallower iterations.
+
+| Command | Finished depth | Nodes | Time | Move | Score |
+| :--- | ---: | ---: | ---: | :--- | ---: |
+| `go depth 7` | 7 | 982,303 | 1,340 ms | d2d4 | +10 |
+| `go movetime 1000` | 6 | 252,317 | 287 ms | d2d4 | +5 |
+
+Depth 7 takes about 1.3 seconds, so a one-second search finishes depth 6 and does not finish depth 7.
+
+### Tactics
+
+| Position | Depth | Move | Score |
+| :--- | ---: | :--- | ---: |
+| `7k/5Q2/6K1/8/8/8/8/8 w - - 0 1` | 3 | f7f8 | 99999 |
+| `r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4` | 3 | h5f7 | 99999 |
+| `rnb1kbnr/pppppppp/8/8/8/q7/PPPPPPPP/RNBQKBNR w KQkq - 0 1` | 2 | b1a3 | 860 |
+| `k7/8/1K6/8/8/8/8/7R w - - 0 1` | 3 | h1h8 | 99999 |
+
+4/4. The first is mate by Qf8, the second is Scholar's mate, the third wins the queen on a3, and the fourth is Rh8 mate. A score of 99999 is mate in one.
+
+### Depth 4 against depth 1
+
+20 games, both sides this engine. One side searched 4 plies and the other searched 1 ply, colors swapped, from 10 openings: the start position, 1. e4, 1. d4, 1. Nf3, 1. c4, a Sicilian, an Open Game, a Queen's Gambit, a French, and an Italian. A game stopped when a side had no legal move, or at 80 plies after the opening.
+
+Depth 4 won 12, lost 0, and 8 were still going at the ply cap. The search does not score repetitions or the 50-move rule, so those 8 are unfinished games. The result says 4 plies beats 1 ply on this program. It is not a rating against people or against another engine.
 
 ---
 
