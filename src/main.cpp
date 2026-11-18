@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 #include "Board.h"
 #include "Perft.h"
 #include "Search.h"
@@ -15,6 +16,125 @@ static const char* startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQk
 //   ./engine divide <depth> [fen]    per-move node counts for debugging
 //   ./engine eval [fen]              print the static evaluation in centipawns
 //   ./engine search [depth] [fen]    minimax best move and White-relative score
+//   ./engine hash                    check zobrist keys against a from-scratch rebuild
+
+static bool playUci(Board& board, const char* text)
+{
+    std::vector<Move> moves;
+    board.generateLegalMoves(moves);
+    for (const Move& move : moves)
+    {
+        if (moveToString(move) == text)
+        {
+            board.makeMove(move);
+            return true;
+        }
+    }
+    return false;
+}
+
+// every makeMove has to leave the incremental hash equal to a full rebuild,
+// including castling, en passant and promotions.
+static bool hashWalk(const Board& board, int depth)
+{
+    if (!board.zobristValid())
+    {
+        return false;
+    }
+    if (depth == 0)
+    {
+        return true;
+    }
+
+    std::vector<Move> moves;
+    board.generateLegalMoves(moves);
+    for (const Move& move : moves)
+    {
+        Board next = board;
+        next.makeMove(move);
+        if (!hashWalk(next, depth - 1))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool hashCase(const char* name, bool ok)
+{
+    printf("[%s] %s\n", ok ? "PASS" : "FAIL", name);
+    return ok;
+}
+
+static bool runHashChecks()
+{
+    int passed = 0;
+    int total = 0;
+
+    Board start;
+    start.loadFEN(startFEN);
+    total++;
+    passed += hashCase("start position rebuild", start.zobristValid());
+
+    Board passedTurn = start;
+    passedTurn.makeNullMove();
+    Board blackToMove;
+    blackToMove.loadFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1");
+    total++;
+    passed += hashCase("null move matches black to move",
+                        passedTurn.zobristValid() && passedTurn.zobristKey() == blackToMove.zobristKey());
+
+    // both lines end on Bc4, so the en passant file from e5 has been cleared
+    // and the two move orders are the same position.
+    Board lineA = start;
+    Board lineB = start;
+    const char* orderA[] = { "e2e4", "e7e5", "g1f3", "b8c6", "f1c4" };
+    const char* orderB[] = { "g1f3", "b8c6", "e2e4", "e7e5", "f1c4" };
+    bool transposed = true;
+    for (const char* move : orderA)
+    {
+        transposed = transposed && playUci(lineA, move) && lineA.zobristValid();
+    }
+    for (const char* move : orderB)
+    {
+        transposed = transposed && playUci(lineB, move) && lineB.zobristValid();
+    }
+    total++;
+    passed += hashCase("transposition e4/Nf3", transposed && lineA.zobristKey() == lineB.zobristKey());
+
+    // a single step and a double step are different positions: only the double step
+    // leaves an en passant file in the key.
+    Board oneStep = start;
+    Board twoStep = start;
+    bool epDiffers = playUci(oneStep, "e2e3") && playUci(twoStep, "e2e4")
+        && oneStep.zobristValid() && twoStep.zobristValid()
+        && oneStep.zobristKey() != twoStep.zobristKey();
+    total++;
+    passed += hashCase("en passant file changes the key", epDiffers);
+
+    struct Walk
+    {
+        const char* name;
+        const char* fen;
+        int depth;
+    };
+    const Walk walks[] = {
+        { "start position walk", startFEN, 4 },
+        { "kiwipete walk", "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", 3 },
+        { "promotions walk", "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8", 3 },
+    };
+    for (const Walk& walk : walks)
+    {
+        Board board;
+        board.loadFEN(walk.fen);
+        total++;
+        passed += hashCase(walk.name, hashWalk(board, walk.depth));
+    }
+
+    printf("\n%d/%d hash checks passed\n", passed, total);
+    return passed == total;
+}
+
 int main(int argc, char* argv[]) {
     std::string command = (argc > 1) ? argv[1] : "";
 
@@ -64,6 +184,10 @@ int main(int argc, char* argv[]) {
 
         printf("%s %d\n", moveToString(result.bestMove).c_str(), result.score);
         return 0;
+    }
+
+    if (command == "hash") {
+        return runHashChecks() ? 0 : 1;
     }
 
     if (command == "print") {
