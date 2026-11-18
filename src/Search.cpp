@@ -444,7 +444,7 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
 // alpha is the best score White can already force. beta is the best score Black can already force.
 // a score outside [alpha, beta] will never be chosen, so the rest of this node's moves are skipped.
 static SearchResult minimax(const Board& board, int depth, int ply, int alpha, int beta,
-                            SearchClock& clock, const Move* preferred)
+                            SearchClock& clock, const Move* preferred, bool allowNull)
 {
     SearchResult result{};
 
@@ -476,11 +476,57 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
     std::vector<Move> moves;
     board.generateLegalMoves(moves);
 
+    bool inCheck = board.isInCheck(board.sideToMove());
     if (moves.empty())
     {
-        result.score = gameOverScore(board.sideToMove(), ply, board.isInCheck(board.sideToMove()));
+        result.score = gameOverScore(board.sideToMove(), ply, inCheck);
         storeTable(key, depth, ply, result.score, ttExact, nullptr);
         return result;
+    }
+
+    // White wants the highest score. Black wants the lowest, because the score is from White's point of view.
+    bool maximizing = board.sideToMove() == Colors::white;
+
+    // give the opponent a free move. if the position is still good enough to
+    // beat the window, every real move would be too, so the rest of this node
+    // can be skipped. a king and pawns is left out: passing can be the losing move.
+    if (allowNull && ply > 0 && depth >= 3 && !inCheck && board.hasNonPawnMaterial(board.sideToMove()))
+    {
+        int standing = board.evaluate();
+        bool alreadyGood = maximizing ? standing >= beta : standing <= alpha;
+        if (alreadyGood)
+        {
+            int reduction = (depth >= 6) ? 3 : 2;
+            int nullDepth = depth - 1 - reduction;
+            if (nullDepth < 0)
+            {
+                nullDepth = 0;
+            }
+
+            Board next = board;
+            next.makeNullMove();
+            // a narrow window: we only care whether the skip clears the cutoff.
+            int nullAlpha = maximizing ? beta - 1 : alpha;
+            int nullBeta = maximizing ? beta : alpha + 1;
+            SearchResult skipped = minimax(next, nullDepth, ply + 1, nullAlpha, nullBeta, clock, nullptr, false);
+            if (clock.stop)
+            {
+                return result;
+            }
+
+            if (maximizing && skipped.score >= beta)
+            {
+                result.score = beta;
+                storeTable(key, depth, ply, beta, ttLower, nullptr);
+                return result;
+            }
+            if (!maximizing && skipped.score <= alpha)
+            {
+                result.score = alpha;
+                storeTable(key, depth, ply, alpha, ttUpper, nullptr);
+                return result;
+            }
+        }
     }
 
     orderMoves(moves);
@@ -495,8 +541,6 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
         preferMove(moves, *preferred);
     }
 
-    // White wants the highest score. Black wants the lowest, because the score is from White's point of view.
-    bool maximizing = board.sideToMove() == Colors::white;
     bool found = false;
 
     for (const Move& move : moves)
@@ -511,7 +555,7 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
 
         Board next = board;
         next.makeMove(move);
-        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, clock, nullptr);
+        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, clock, nullptr, true);
         if (clock.stop)
         {
             return result;
@@ -559,7 +603,7 @@ SearchResult minimaxSearch(const Board& board, int depth)
 
     SearchClock clock;
     beginSearch();
-    SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, nullptr);
+    SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, nullptr, true);
     result.depth = depth;
     result.nodes = clock.nodes;
     return result;
@@ -604,7 +648,7 @@ SearchResult iterativeSearch(const Board& board, const SearchLimits& limits, Dep
         clock.stop = false;
 
         const Move* preferred = hasPrevious ? &previousBest : nullptr;
-        SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, preferred);
+        SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, preferred, true);
 
         // a depth that stops halfway has only scored some of its moves, so its
         // best move is not trustworthy. keep the last depth that finished.
