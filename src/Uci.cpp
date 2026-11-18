@@ -85,8 +85,8 @@ static void handlePosition(Board& board, std::istringstream& tokens)
     }
 }
 
-// "go" searches a fixed depth. "go depth N" uses N; otherwise the engine looks 3 plies ahead.
-// time controls are ignored until iterative deepening exists.
+// "go" walks depth 1, then 2, then 3. "go depth N" stops at N; otherwise it stops at 3.
+// time controls are ignored until the search can abort a depth that runs long.
 static int depthFromGo(std::istringstream& tokens)
 {
     int depth = 3;
@@ -108,7 +108,7 @@ static int depthFromGo(std::istringstream& tokens)
 static void handleGo(const Board& board, std::istringstream& tokens)
 {
     int depth = depthFromGo(tokens);
-    SearchResult result = minimaxSearch(board, depth);
+    SearchResult result = iterativeSearch(board, depth);
 
     if (!result.hasMove)
     {

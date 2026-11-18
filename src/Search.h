@@ -22,4 +22,8 @@ struct SearchResult
 // not scored until the recapture is seen.
 SearchResult minimaxSearch(const Board& board, int depth);
 
+// depth 1, then depth 2, then depth 3, up to maxDepth.
+// each finished depth replaces the move from the shallower one.
+SearchResult iterativeSearch(const Board& board, int maxDepth);
+
 #endif

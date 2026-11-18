@@ -47,6 +47,24 @@ static void orderMoves(std::vector<Move>& moves)
     });
 }
 
+// the move that won the previous depth is tried first. alpha-beta then gets a
+// strong score early and can skip more of the other moves.
+static void preferMove(std::vector<Move>& moves, const Move& preferred)
+{
+    for (size_t i = 1; i < moves.size(); i++)
+    {
+        const Move& move = moves[i];
+        if (move.sourceSquare == preferred.sourceSquare
+            && move.targetSquare == preferred.targetSquare
+            && move.promotionPiece == preferred.promotionPiece)
+        {
+            auto it = moves.begin() + static_cast<std::vector<Move>::difference_type>(i);
+            std::rotate(moves.begin(), it, it + 1);
+            return;
+        }
+    }
+}
+
 // no legal move ends the game. check is a loss for the side about to move; otherwise it is stalemate.
 static int gameOverScore(Colors sideToMove, int ply, bool inCheck)
 {
@@ -178,7 +196,8 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
 // which is only used to prefer a faster mate.
 // alpha is the best score White can already force. beta is the best score Black can already force.
 // a score outside [alpha, beta] will never be chosen, so the rest of this node's moves are skipped.
-static SearchResult minimax(const Board& board, int depth, int ply, int alpha, int beta, uint64_t& nodes)
+static SearchResult minimax(const Board& board, int depth, int ply, int alpha, int beta,
+                            uint64_t& nodes, const Move* preferred)
 {
     SearchResult result{};
 
@@ -201,6 +220,10 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
     }
 
     orderMoves(moves);
+    if (ply == 0 && preferred != nullptr)
+    {
+        preferMove(moves, *preferred);
+    }
 
     // White wants the highest score. Black wants the lowest, because the score is from White's point of view.
     bool maximizing = board.sideToMove() == Colors::white;
@@ -210,7 +233,7 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
     {
         Board next = board;
         next.makeMove(move);
-        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, nodes);
+        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, nodes, nullptr);
 
         bool better = !found || (maximizing ? child.score > result.score : child.score < result.score);
         if (better)
@@ -251,8 +274,41 @@ SearchResult minimaxSearch(const Board& board, int depth)
     }
 
     uint64_t nodes = 0;
-    SearchResult result = minimax(board, depth, 0, -infinite, infinite, nodes);
+    SearchResult result = minimax(board, depth, 0, -infinite, infinite, nodes, nullptr);
     result.depth = depth;
     result.nodes = nodes;
     return result;
+}
+
+SearchResult iterativeSearch(const Board& board, int maxDepth)
+{
+    if (maxDepth < 1)
+    {
+        maxDepth = 1;
+    }
+
+    uint64_t nodes = 0;
+    SearchResult finished{};
+    Move previousBest{};
+    bool hasPrevious = false;
+
+    for (int depth = 1; depth <= maxDepth; depth++)
+    {
+        const Move* preferred = hasPrevious ? &previousBest : nullptr;
+        SearchResult result = minimax(board, depth, 0, -infinite, infinite, nodes, preferred);
+
+        result.depth = depth;
+        result.nodes = nodes;
+        finished = result;
+
+        if (!finished.hasMove)
+        {
+            break;
+        }
+
+        previousBest = finished.bestMove;
+        hasPrevious = true;
+    }
+
+    return finished;
 }
