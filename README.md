@@ -91,7 +91,7 @@ To transition from a beginner bot to a sharp, tactical medium-strength engine, w
 - [✅] **Quiescence Search**
   - Solve the "Horizon Effect" (where the engine searches to Depth 4, sees it won a piece, but misses that it gets recaptured on Depth 5).
   - When the main search hits depth limit, launch a mini-search that *only evaluates tactical captures* until the board reaches a "quiet" state.
-- [ ] **Iterative Deepening & Time Management**
+- [✅] **Iterative Deepening & Time Management**
   - Replace fixed-depth searches with a loop that searches Depth 1, then Depth 2, Depth 3, etc.
   - Use C++ `std::chrono` timers to track elapsed time during the UCI `go wtime <ms> btime <ms>` command. If time expires midway through a deeper search, cleanly abort and return the best move found from the last completed depth.
 
