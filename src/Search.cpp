@@ -15,6 +15,13 @@ static const int infinite = mateScore + 1;
 // a chain of checks does not, so stop answering checks after this many extra plies.
 static const int quiescenceCheckPly = 8;
 
+// iterative deepening will not walk past this, even with a huge clock.
+static const int absoluteMaxDepth = 64;
+
+// the clock is read every 2048 nodes, so a search stops within a few milliseconds
+// of the deadline without reading the timer on every position.
+static const uint64_t timeCheckInterval = 2048;
+
 // victim values, indexed by Pieces. the king is never captured.
 static const int victimValue[7] = { 0, 100, 320, 330, 500, 900, 0 };
 // cheaper attackers sort first: pawn, knight, bishop, rook, queen, king.
@@ -46,6 +53,39 @@ static void orderMoves(std::vector<Move>& moves)
     {
         return mvvLva(a) > mvvLva(b);
     });
+}
+
+// shared by every node of one search. armed is false for depth 1, so that
+// depth always finishes and the engine still has a move when the clock is tiny.
+struct SearchClock
+{
+    bool armed = false;
+    bool stop = false;
+    uint64_t nodes = 0;
+    std::chrono::steady_clock::time_point deadline{};
+};
+
+// true once the clock has run out. the flag sticks, so the tree unwinds
+// without starting any more moves.
+static bool outOfTime(SearchClock& clock)
+{
+    clock.nodes++;
+
+    if (clock.stop)
+    {
+        return true;
+    }
+    if (!clock.armed)
+    {
+        return false;
+    }
+
+    if (clock.nodes % timeCheckInterval == 0
+        && std::chrono::steady_clock::now() >= clock.deadline)
+    {
+        clock.stop = true;
+    }
+    return clock.stop;
 }
 
 // the move that won the previous depth is tried first. alpha-beta then gets a
@@ -82,9 +122,14 @@ static int gameOverScore(Colors sideToMove, int ply, bool inCheck)
 // a noisy position has a capture, a promotion, or a king in check.
 // standing pat means "stop and take the static score". that is always allowed when
 // not in check, so a bad capture can never score worse than doing nothing.
-static int quiescence(const Board& board, int ply, int alpha, int beta, int checkPly, uint64_t& nodes)
+static int quiescence(const Board& board, int ply, int alpha, int beta, int checkPly, SearchClock& clock)
 {
-    nodes++;
+    // captures past the depth limit have to notice the clock too, or a long
+    // recapture sequence can run past the time allowed for this move.
+    if (outOfTime(clock))
+    {
+        return 0;
+    }
 
     bool maximizing = board.sideToMove() == Colors::white;
     bool inCheck = board.isInCheck(board.sideToMove());
@@ -158,7 +203,11 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
     {
         Board next = board;
         next.makeMove(move);
-        int score = quiescence(next, ply + 1, alpha, beta, nextCheckPly, nodes);
+        int score = quiescence(next, ply + 1, alpha, beta, nextCheckPly, clock);
+        if (clock.stop)
+        {
+            return 0;
+        }
 
         if (maximizing)
         {
@@ -198,18 +247,21 @@ static int quiescence(const Board& board, int ply, int alpha, int beta, int chec
 // alpha is the best score White can already force. beta is the best score Black can already force.
 // a score outside [alpha, beta] will never be chosen, so the rest of this node's moves are skipped.
 static SearchResult minimax(const Board& board, int depth, int ply, int alpha, int beta,
-                            uint64_t& nodes, const Move* preferred)
+                            SearchClock& clock, const Move* preferred)
 {
     SearchResult result{};
 
     // depth ran out. keep going through captures so a hanging piece is not "won" on the last ply.
     if (depth == 0)
     {
-        result.score = quiescence(board, ply, alpha, beta, quiescenceCheckPly, nodes);
+        result.score = quiescence(board, ply, alpha, beta, quiescenceCheckPly, clock);
         return result;
     }
 
-    nodes++;
+    if (outOfTime(clock))
+    {
+        return result;
+    }
 
     std::vector<Move> moves;
     board.generateLegalMoves(moves);
@@ -232,9 +284,21 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
 
     for (const Move& move : moves)
     {
+        // between root moves, stop as soon as the clock is up. the moves already
+        // searched here are not the whole list, so this depth will be discarded.
+        if (ply == 0 && clock.armed && std::chrono::steady_clock::now() >= clock.deadline)
+        {
+            clock.stop = true;
+            return result;
+        }
+
         Board next = board;
         next.makeMove(move);
-        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, nodes, nullptr);
+        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, clock, nullptr);
+        if (clock.stop)
+        {
+            return result;
+        }
 
         bool better = !found || (maximizing ? child.score > result.score : child.score < result.score);
         if (better)
@@ -274,10 +338,10 @@ SearchResult minimaxSearch(const Board& board, int depth)
         depth = 1;
     }
 
-    uint64_t nodes = 0;
-    SearchResult result = minimax(board, depth, 0, -infinite, infinite, nodes, nullptr);
+    SearchClock clock;
+    SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, nullptr);
     result.depth = depth;
-    result.nodes = nodes;
+    result.nodes = clock.nodes;
     return result;
 }
 
@@ -287,26 +351,48 @@ static int elapsedMs(std::chrono::steady_clock::time_point start)
         std::chrono::steady_clock::now() - start).count();
 }
 
-SearchResult iterativeSearch(const Board& board, int maxDepth, DepthFinishedFn onDepth)
+SearchResult iterativeSearch(const Board& board, const SearchLimits& limits, DepthFinishedFn onDepth)
 {
-    if (maxDepth < 1)
+    int depthLimit = limits.maxDepth;
+    if (depthLimit < 1 || depthLimit > absoluteMaxDepth)
     {
-        maxDepth = 1;
+        depthLimit = absoluteMaxDepth;
     }
 
+    // timeMs < 0 is an untimed search. zero still finishes depth 1 and then stops.
+    bool timed = limits.timeMs >= 0;
     auto start = std::chrono::steady_clock::now();
-    uint64_t nodes = 0;
+    auto deadline = start + std::chrono::milliseconds(timed && limits.timeMs > 0 ? limits.timeMs : 0);
+
+    SearchClock clock;
+    clock.deadline = deadline;
+
     SearchResult finished{};
     Move previousBest{};
     bool hasPrevious = false;
 
-    for (int depth = 1; depth <= maxDepth; depth++)
+    for (int depth = 1; depth <= depthLimit; depth++)
     {
+        if (timed && depth > 1 && std::chrono::steady_clock::now() >= deadline)
+        {
+            break;
+        }
+
+        clock.armed = timed && depth > 1;
+        clock.stop = false;
+
         const Move* preferred = hasPrevious ? &previousBest : nullptr;
-        SearchResult result = minimax(board, depth, 0, -infinite, infinite, nodes, preferred);
+        SearchResult result = minimax(board, depth, 0, -infinite, infinite, clock, preferred);
+
+        // a depth that stops halfway has only scored some of its moves, so its
+        // best move is not trustworthy. keep the last depth that finished.
+        if (clock.stop)
+        {
+            break;
+        }
 
         result.depth = depth;
-        result.nodes = nodes;
+        result.nodes = clock.nodes;
         finished = result;
 
         if (onDepth != nullptr && finished.hasMove)

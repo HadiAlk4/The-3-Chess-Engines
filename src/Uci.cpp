@@ -126,9 +126,10 @@ static void reportDepth(const SearchResult& result, int elapsedMs)
 
 static void handleGo(const Board& board, std::istringstream& tokens)
 {
-    int depth = depthFromGo(tokens);
+    SearchLimits limits;
+    limits.maxDepth = depthFromGo(tokens);
     reportingSide = board.sideToMove();
-    SearchResult result = iterativeSearch(board, depth, reportDepth);
+    SearchResult result = iterativeSearch(board, limits, reportDepth);
 
     if (!result.hasMove)
     {
