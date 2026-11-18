@@ -100,9 +100,9 @@ To transition from a beginner bot to a sharp, tactical medium-strength engine, w
 ### Phase 6: Advanced Polish & Optimization (Optional / Next Steps)
 Once your engine reaches Phase 5, it will comfortably beat casual club players. To push it even further toward ~2000+ Elo:
 
-- [ ] **Zobrist Hashing & Transposition Tables:** Store previously evaluated positions in a custom hash map to avoid redundant calculations when different move orders reach the same board state.
-- [ ] **Null Move Pruning:** Give the opponent a "free turn" in the search tree; if our position is still winning even after skipping a move, we can safely prune the branch early.
-- [ ] **Late Move Reductions (LMR):** Search moves that are unlikely to be good (like quiet moves late in the move ordering list) to a shallower depth to save CPU cycles.
+- [✅] **Zobrist Hashing & Transposition Tables:** Store previously evaluated positions in a custom hash map to avoid redundant calculations when different move orders reach the same board state.
+- [✅] **Null Move Pruning:** Give the opponent a "free turn" in the search tree; if our position is still winning even after skipping a move, we can safely prune the branch early.
+- [✅] **Late Move Reductions (LMR):** Search moves that are unlikely to be good (like quiet moves late in the move ordering list) to a shallower depth to save CPU cycles.
 
 ---
 
