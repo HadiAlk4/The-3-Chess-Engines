@@ -34,7 +34,9 @@ using DepthFinishedFn = void (*)(const SearchResult& result, int elapsedMs);
 // searched until the position is quiet, so a capture on the horizon is
 // not scored until the recapture is seen.
 // A position reached by two different move orders is searched once and then
-// read back from the transposition table.
+// read back from the transposition table. Quiet moves late in the ordering are
+// searched a ply shallower, and a position that still beats the window after
+// passing the turn is pruned.
 // This searches exactly `depth` plies and ignores the clock.
 SearchResult minimaxSearch(const Board& board, int depth);
 

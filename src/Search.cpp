@@ -542,6 +542,9 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
     }
 
     bool found = false;
+    // captures are always searched in full. this counts quiet moves so a capture
+    // does not push the best quiet move into the reduced tail.
+    int quietCount = 0;
 
     for (const Move& move : moves)
     {
@@ -555,10 +558,57 @@ static SearchResult minimax(const Board& board, int depth, int ply, int alpha, i
 
         Board next = board;
         next.makeMove(move);
-        SearchResult child = minimax(next, depth - 1, ply + 1, alpha, beta, clock, nullptr, true);
+
+        // quiet moves late in the list are usually bad. search them one ply
+        // shallower, and only pay for the full depth if that still looks good.
+        // the root and the first few moves stay at full depth so the best line
+        // is not guessed.
+        int reduction = 0;
+        bool lateQuiet = ply > 0 && depth >= 4 && quietCount >= 3 && !inCheck
+            && !isTactical(move) && (beta - alpha > 1)
+            && !next.isInCheck(next.sideToMove());
+        if (lateQuiet)
+        {
+            reduction = 1;
+        }
+
+        int childAlpha = alpha;
+        int childBeta = beta;
+        if (reduction > 0)
+        {
+            // a one-point window is enough to learn whether the move can matter.
+            if (maximizing)
+            {
+                childBeta = alpha + 1;
+            }
+            else
+            {
+                childAlpha = beta - 1;
+            }
+        }
+
+        SearchResult child = minimax(next, depth - 1 - reduction, ply + 1, childAlpha, childBeta, clock, nullptr, true);
         if (clock.stop)
         {
             return result;
+        }
+
+        if (reduction > 0)
+        {
+            bool stillGood = maximizing ? child.score > alpha : child.score < beta;
+            if (stillGood)
+            {
+                child = minimax(next, depth - 1, ply + 1, alpha, beta, clock, nullptr, true);
+                if (clock.stop)
+                {
+                    return result;
+                }
+            }
+        }
+
+        if (!isTactical(move))
+        {
+            quietCount++;
         }
 
         bool better = !found || (maximizing ? child.score > result.score : child.score < result.score);
