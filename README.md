@@ -86,7 +86,7 @@ Give the engine a brain. Now that it can communicate with a GUI, every improveme
 ### Phase 5: Smart Search & Optimization (Reaching Medium Strength)
 To transition from a beginner bot to a sharp, tactical medium-strength engine, we optimize *how* the tree is searched.
 
-- [ ] **Move Ordering (MVV-LVA)**
+- [✅] **Move Ordering (MVV-LVA)**
   - Alpha-Beta pruning is most efficient when best moves are searched first. Sort generated moves before searching using **Most Valuable Victim - Least Valuable Attacker** (e.g., search P × Q first, quiet moves last).
 - [ ] **Quiescence Search**
   - Solve the "Horizon Effect" (where the engine searches to Depth 4, sees it won a piece, but misses that it gets recaptured on Depth 5).
