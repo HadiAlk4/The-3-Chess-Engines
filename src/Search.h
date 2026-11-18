@@ -14,7 +14,9 @@ struct SearchResult
 };
 
 // White maximizes the score, Black minimizes it, with alpha-beta pruning.
-// depth is in plies (a full move is 2).
+// depth is in plies (a full move is 2). At depth 0, captures keep being
+// searched until the position is quiet, so a capture on the horizon is
+// not scored until the recapture is seen.
 SearchResult minimaxSearch(const Board& board, int depth);
 
 #endif
