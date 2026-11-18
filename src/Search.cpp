@@ -1,6 +1,7 @@
 #include "Search.h"
 
 #include <algorithm>
+#include <chrono>
 #include <vector>
 
 // bigger than any material or piece-square total, so a checkmate always outranks a capture.
@@ -280,13 +281,20 @@ SearchResult minimaxSearch(const Board& board, int depth)
     return result;
 }
 
-SearchResult iterativeSearch(const Board& board, int maxDepth)
+static int elapsedMs(std::chrono::steady_clock::time_point start)
+{
+    return (int)std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+}
+
+SearchResult iterativeSearch(const Board& board, int maxDepth, DepthFinishedFn onDepth)
 {
     if (maxDepth < 1)
     {
         maxDepth = 1;
     }
 
+    auto start = std::chrono::steady_clock::now();
     uint64_t nodes = 0;
     SearchResult finished{};
     Move previousBest{};
@@ -300,6 +308,11 @@ SearchResult iterativeSearch(const Board& board, int maxDepth)
         result.depth = depth;
         result.nodes = nodes;
         finished = result;
+
+        if (onDepth != nullptr && finished.hasMove)
+        {
+            onDepth(finished, elapsedMs(start));
+        }
 
         if (!finished.hasMove)
         {

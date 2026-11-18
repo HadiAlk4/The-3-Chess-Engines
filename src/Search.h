@@ -22,8 +22,11 @@ struct SearchResult
 // not scored until the recapture is seen.
 SearchResult minimaxSearch(const Board& board, int depth);
 
+// called after each depth that finishes, with how many milliseconds have passed.
+using DepthFinishedFn = void (*)(const SearchResult& result, int elapsedMs);
+
 // depth 1, then depth 2, then depth 3, up to maxDepth.
 // each finished depth replaces the move from the shallower one.
-SearchResult iterativeSearch(const Board& board, int maxDepth);
+SearchResult iterativeSearch(const Board& board, int maxDepth, DepthFinishedFn onDepth = nullptr);
 
 #endif

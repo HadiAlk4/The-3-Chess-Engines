@@ -105,10 +105,30 @@ static int depthFromGo(std::istringstream& tokens)
     return depth;
 }
 
+// set for the duration of one "go", so each finished depth can be printed
+// from the side to move's point of view.
+static Colors reportingSide = Colors::white;
+
+static void reportDepth(const SearchResult& result, int elapsedMs)
+{
+    int score = result.score;
+    if (reportingSide == Colors::black)
+    {
+        score = -score;
+    }
+
+    std::cout << "info depth " << result.depth
+              << " score cp " << score
+              << " nodes " << result.nodes
+              << " time " << elapsedMs
+              << " pv " << moveToString(result.bestMove) << '\n';
+}
+
 static void handleGo(const Board& board, std::istringstream& tokens)
 {
     int depth = depthFromGo(tokens);
-    SearchResult result = iterativeSearch(board, depth);
+    reportingSide = board.sideToMove();
+    SearchResult result = iterativeSearch(board, depth, reportDepth);
 
     if (!result.hasMove)
     {
@@ -117,14 +137,6 @@ static void handleGo(const Board& board, std::istringstream& tokens)
         return;
     }
 
-    // UCI scores are from the side to move, so flip a White-relative score when Black is searching
-    int score = result.score;
-    if (board.sideToMove() == Colors::black)
-    {
-        score = -score;
-    }
-
-    std::cout << "info depth " << depth << " score cp " << score << '\n';
     std::cout << "bestmove " << moveToString(result.bestMove) << '\n';
 }
 
